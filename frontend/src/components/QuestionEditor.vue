@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { Question, QuestionOption } from '../types'
-import { ChevronUp, ChevronDown, Trash2, GripVertical } from 'lucide-vue-next'
+import { ChevronUp, ChevronDown, Trash2, GripVertical, Copy } from 'lucide-vue-next'
 
 const props = defineProps<{
   question: Question
@@ -13,6 +13,7 @@ const emit = defineEmits<{
   update: [data: Partial<Question>]
   delete: []
   move: [direction: 'up' | 'down']
+  clone: []
 }>()
 
 const localContent = ref(props.question.content)
@@ -80,6 +81,9 @@ function toggleRequired() {
           @click="emit('move', 'down')"
         >
           <ChevronDown :size="18" />
+        </button>
+        <button class="icon-btn" @click="emit('clone')" title="克隆题目">
+          <Copy :size="18" />
         </button>
         <button class="icon-btn danger" @click="emit('delete')">
           <Trash2 :size="18" />

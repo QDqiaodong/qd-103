@@ -77,6 +77,27 @@ function moveQuestion(index: number, direction: 'up' | 'down') {
   questions.value[newIndex] = temp
 }
 
+function cloneQuestion(index: number) {
+  const original = questions.value[index]
+  const cloned: (typeof questions.value)[0] = {
+    ...JSON.parse(JSON.stringify(original)),
+    id: 'q_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
+  }
+  
+  if (cloned.options) {
+    cloned.options = cloned.options.map(opt => ({
+      ...opt,
+      id: 'o_' + Math.random().toString(36).substring(2)
+    }))
+  }
+  
+  questions.value.splice(index + 1, 0, cloned)
+  
+  questions.value.forEach((q, i) => {
+    q.orderIndex = i
+  })
+}
+
 async function saveQuestionnaire() {
   if (!canSave.value) return
 
@@ -227,6 +248,7 @@ function copyLink() {
                 @update="(data) => updateQuestion(index, data)"
                 @delete="deleteQuestion(index)"
                 @move="(dir) => moveQuestion(index, dir)"
+                @clone="cloneQuestion(index)"
               />
             </div>
 
