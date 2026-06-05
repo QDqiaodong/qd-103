@@ -6,6 +6,7 @@ Thumbs.db
 
 .trae/
 .codex/
+.codex-fixes/
 
 *.log
 logs/
