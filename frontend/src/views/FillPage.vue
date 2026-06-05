@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
 import type { Answer, CoverConfig } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
 import FormRenderer from '../engine/FormRenderer.vue'
+import QuestionNavigation from '../components/QuestionNavigation.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,17 @@ const submitted = ref(false)
 const errorMsg = ref('')
 
 const questionnaireId = computed(() => route.params.id as string)
+
+const showNavigation = computed(() => {
+  return store.currentQuestionnaire && store.currentQuestionnaire.questions.length >= 5
+})
+
+function jumpToQuestion(questionId: string) {
+  const el = document.getElementById(`question-${questionId}`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
 
 onMounted(async () => {
   await store.fetchQuestionnaire(questionnaireId.value)
@@ -106,7 +118,17 @@ function goHome() {
 
 <template>
   <div class="fill-page">
-    <div class="fill-container">
+    <div :class="['fill-container', { 'with-nav': showNavigation }]">
+      <aside v-if="showNavigation" class="nav-sidebar">
+        <QuestionNavigation
+          :questions="store.currentQuestionnaire.questions"
+          :answers="answers"
+          :accent-color="coverConfig.accentColor"
+          @jump="jumpToQuestion"
+        />
+      </aside>
+
+      <main class="main-content">
       <div v-if="store.loading" class="loading">
         加载中...
       </div>
@@ -217,6 +239,7 @@ function goHome() {
           </button>
         </div>
       </template>
+      </main>
     </div>
   </div>
 </template>
@@ -231,6 +254,34 @@ function goHome() {
 .fill-container {
   max-width: 700px;
   margin: 0 auto;
+}
+
+.fill-container.with-nav {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.nav-sidebar {
+  position: sticky;
+  top: 24px;
+}
+
+.main-content {
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .fill-container.with-nav {
+    grid-template-columns: 1fr;
+    max-width: 700px;
+  }
+
+  .nav-sidebar {
+    position: static;
+  }
 }
 
 .loading,

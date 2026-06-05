@@ -23,6 +23,8 @@ function handleAnswer(questionId: string, value: string | string[]) {
     <div
       v-for="(question, index) in questions"
       :key="question.id"
+      :id="`question-${question.id}`"
+      :data-question-id="question.id"
       class="question-block"
     >
       <div class="question-label">
