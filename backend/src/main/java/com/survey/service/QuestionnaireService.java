@@ -61,8 +61,6 @@ public class QuestionnaireService {
                 question.setOrderIndex(qdto.getOrderIndex());
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
 
-                question = questionRepository.save(question);
-
                 if (qdto.getOptions() != null) {
                     for (OptionDTO odto : qdto.getOptions()) {
                         OptionItem option = new OptionItem();
@@ -72,8 +70,10 @@ public class QuestionnaireService {
                         option.setOrderIndex(odto.getOrderIndex());
                         question.getOptions().add(option);
                     }
-                    questionRepository.save(question);
                 }
+
+                question = questionRepository.save(question);
+                questionnaire.getQuestions().add(question);
             }
         }
 
@@ -100,8 +100,7 @@ public class QuestionnaireService {
         questionnaire = questionnaireRepository.save(questionnaire);
 
         if (dto.getQuestions() != null) {
-            questionRepository.findByQuestionnaireIdOrderByOrderIndex(id)
-                    .forEach(questionRepository::delete);
+            questionnaire.getQuestions().clear();
 
             for (QuestionDTO qdto : dto.getQuestions()) {
                 Question question = new Question();
@@ -112,8 +111,6 @@ public class QuestionnaireService {
                 question.setOrderIndex(qdto.getOrderIndex());
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
 
-                question = questionRepository.save(question);
-
                 if (qdto.getOptions() != null) {
                     for (OptionDTO odto : qdto.getOptions()) {
                         OptionItem option = new OptionItem();
@@ -123,20 +120,26 @@ public class QuestionnaireService {
                         option.setOrderIndex(odto.getOrderIndex());
                         question.getOptions().add(option);
                     }
-                    questionRepository.save(question);
                 }
+
+                questionnaire.getQuestions().add(question);
             }
         }
 
+        questionnaire = questionnaireRepository.save(questionnaire);
         return toDTO(questionnaire);
     }
 
     @Transactional
     public boolean deleteQuestionnaire(String id) {
-        if (!questionnaireRepository.existsById(id)) {
+        Questionnaire questionnaire = questionnaireRepository.findById(id).orElse(null);
+        if (questionnaire == null) {
             return false;
         }
-        questionnaireRepository.deleteById(id);
+
+        answerRepository.deleteAll(answerRepository.findByQuestionnaireId(id));
+        responseRepository.deleteAll(responseRepository.findByQuestionnaireId(id));
+        questionnaireRepository.delete(questionnaire);
         return true;
     }
 
