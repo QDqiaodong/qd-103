@@ -2,7 +2,7 @@ services:
   frontend:
     image: survey-platform-frontend:latest
     build:
-      context: ../frontend
+      context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
       args:
         DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}
@@ -16,7 +16,7 @@ services:
   backend:
     image: survey-platform-backend:latest
     build:
-      context: ../backend
+      context: ./backend
       dockerfile: ../docker/Dockerfile.backend
       args:
         DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}

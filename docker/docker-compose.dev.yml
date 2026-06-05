@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: docker.m.daocloud.io/library/node:18-alpine
+    image: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}/node:18-alpine
     working_dir: /app
     volumes:
       - ../frontend:/app
@@ -20,6 +20,8 @@ services:
     build:
       context: ../backend
       dockerfile: ../docker/Dockerfile.backend
+      args:
+        DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}
     ports:
       - "8080:8080"
     environment:
@@ -31,7 +33,7 @@ services:
       - survey-network
 
   redis:
-    image: docker.m.daocloud.io/library/redis:7-alpine
+    image: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}/redis:7-alpine
     networks:
       - survey-network
 
