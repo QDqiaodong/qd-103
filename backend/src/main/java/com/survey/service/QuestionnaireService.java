@@ -100,6 +100,12 @@ public class QuestionnaireService {
         questionnaire = questionnaireRepository.save(questionnaire);
 
         if (dto.getQuestions() != null) {
+            List<String> oldQuestionIds = questionnaire.getQuestions().stream()
+                    .map(Question::getId)
+                    .toList();
+            if (!oldQuestionIds.isEmpty()) {
+                answerRepository.deleteByQuestionIds(oldQuestionIds);
+            }
             questionnaire.getQuestions().clear();
 
             for (QuestionDTO qdto : dto.getQuestions()) {

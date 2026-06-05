@@ -99,7 +99,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
       }
       return success
     } catch (e) {
-      error.value = '删除问卷失败'
+      error.value = e instanceof Error ? e.message : '删除问卷失败'
       console.error(e)
       return false
     } finally {
@@ -118,7 +118,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
       })
       return success
     } catch (e) {
-      error.value = '提交失败，您可能已经提交过'
+      error.value = e instanceof Error ? e.message : '提交失败，您可能已经提交过'
       console.error(e)
       return false
     } finally {

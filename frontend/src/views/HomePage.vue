@@ -55,7 +55,10 @@ function copyLink(id: string) {
 
 async function deleteQuestionnaire(id: string) {
   if (confirm('确定要删除这个问卷吗？')) {
-    await store.removeQuestionnaire(id)
+    const success = await store.removeQuestionnaire(id)
+    if (!success) {
+      alert(store.error || '删除失败')
+    }
   }
 }
 

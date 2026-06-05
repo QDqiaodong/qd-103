@@ -115,6 +115,8 @@ async function saveQuestionnaire() {
     const result = await store.updateQuestionnaire(questionnaireId.value, data)
     if (result) {
       alert('保存成功')
+    } else {
+      alert(store.error || '保存失败')
     }
   } finally {
     saving.value = false

@@ -2,6 +2,7 @@ package com.survey.repository;
 
 import com.survey.model.Answer;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -17,4 +18,12 @@ public interface AnswerRepository extends JpaRepository<Answer, String> {
 
     @Query("SELECT a FROM Answer a JOIN a.response r WHERE r.questionnaire.id = :questionnaireId")
     List<Answer> findByQuestionnaireId(@Param("questionnaireId") String questionnaireId);
+
+    @Modifying
+    @Query("DELETE FROM Answer a WHERE a.question.id = :questionId")
+    void deleteByQuestionId(@Param("questionId") String questionId);
+
+    @Modifying
+    @Query("DELETE FROM Answer a WHERE a.question.id IN :questionIds")
+    void deleteByQuestionIds(@Param("questionIds") List<String> questionIds);
 }
