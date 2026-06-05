@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import * as api from '../services/api'
 import type { Questionnaire, StatisticsResponse, QuestionStatistic } from '../types'
 import * as echarts from 'echarts'
+import WordCloudView from '../components/WordCloudView.vue'
+import { analyzeWordCloud, type WordCloudData } from '../lib/wordCloud'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,8 +13,19 @@ const router = useRouter()
 const questionnaire = ref<Questionnaire | null>(null)
 const statistics = ref<StatisticsResponse | null>(null)
 const loading = ref(true)
+const wordCloudDataMap = ref<Map<string, WordCloudData>>(new Map())
 
 const questionnaireId = computed(() => route.params.id as string)
+
+function getWordCloudData(questionId: string): WordCloudData {
+  return wordCloudDataMap.value.get(questionId) || {
+    highFrequencyWords: [],
+    corePhrases: [],
+    answerHeats: [],
+    totalAnswers: 0,
+    avgWordCount: 0
+  }
+}
 
 onMounted(async () => {
   await loadData()
@@ -23,6 +36,15 @@ async function loadData() {
   try {
     questionnaire.value = await api.getQuestionnaire(questionnaireId.value)
     statistics.value = await api.getStatistics(questionnaireId.value)
+    
+    wordCloudDataMap.value.clear()
+    statistics.value.questions.forEach(q => {
+      if (q.type === 'text' && q.textAnswers) {
+        const wordCloudData = analyzeWordCloud(q.textAnswers)
+        wordCloudDataMap.value.set(q.questionId, wordCloudData)
+      }
+    })
+    
     await nextTick()
     renderCharts()
   } finally {
@@ -186,19 +208,29 @@ function goBack() {
               class="chart-container"
             ></div>
 
-            <div v-else class="text-answers">
-              <p class="text-hint">文本回答列表（共 {{ q.totalResponses }} 条）</p>
-              <div v-if="q.textAnswers && q.textAnswers.length > 0" class="text-answer-list">
-                <div
-                  v-for="(answer, index) in q.textAnswers"
-                  :key="index"
-                  class="text-answer-item"
-                >
-                  <span class="answer-number">{{ index + 1 }}.</span>
-                  <span class="answer-content">{{ answer }}</span>
+            <div v-else class="text-section">
+              <div class="word-cloud-preview">
+                <div class="section-subtitle">
+                  <span class="subtitle-icon">☁️</span>
+                  观点云预览
                 </div>
+                <WordCloudView :data="getWordCloudData(q.questionId)" />
               </div>
-              <p v-else class="text-empty">暂无回答内容</p>
+
+              <div class="text-answers">
+                <p class="text-hint">文本回答列表（共 {{ q.totalResponses }} 条）</p>
+                <div v-if="q.textAnswers && q.textAnswers.length > 0" class="text-answer-list">
+                  <div
+                    v-for="(answer, index) in q.textAnswers"
+                    :key="index"
+                    class="text-answer-item"
+                  >
+                    <span class="answer-number">{{ index + 1 }}.</span>
+                    <span class="answer-content">{{ answer }}</span>
+                  </div>
+                </div>
+                <p v-else class="text-empty">暂无回答内容</p>
+              </div>
             </div>
 
             <div class="answer-breakdown">
@@ -344,11 +376,38 @@ function goBack() {
   margin-bottom: 20px;
 }
 
+.text-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.word-cloud-preview {
+  background: white;
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--color-border);
+}
+
+.section-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 16px;
+}
+
+.subtitle-icon {
+  font-size: 20px;
+}
+
 .text-answers {
   padding: 20px;
   background: var(--color-bg);
   border-radius: var(--radius);
-  margin-bottom: 20px;
 }
 
 .text-hint {
