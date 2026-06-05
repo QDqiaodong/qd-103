@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '../services/api'
 import type { Questionnaire, StatisticsResponse, QuestionStatistic } from '../types'
@@ -14,6 +14,68 @@ const questionnaire = ref<Questionnaire | null>(null)
 const statistics = ref<StatisticsResponse | null>(null)
 const loading = ref(true)
 const wordCloudDataMap = ref<Map<string, WordCloudData>>(new Map())
+
+const textBrowserState = reactive<Map<string, {
+  expanded: boolean
+  sortBy: 'default' | 'latest' | 'longest'
+  keyword: string
+  visibleCount: number
+}>>(new Map())
+
+function getTextState(questionId: string) {
+  if (!textBrowserState.has(questionId)) {
+    textBrowserState.set(questionId, {
+      expanded: false,
+      sortBy: 'default',
+      keyword: '',
+      visibleCount: 5
+    })
+  }
+  return textBrowserState.get(questionId)!
+}
+
+function getSortedAnswers(questionId: string, textAnswers: string[]): string[] {
+  const state = getTextState(questionId)
+  let answers = [...textAnswers]
+
+  if (state.sortBy === 'longest') {
+    answers.sort((a, b) => b.length - a.length)
+  } else if (state.sortBy === 'latest') {
+    answers.reverse()
+  }
+
+  if (state.keyword.trim()) {
+    const keyword = state.keyword.toLowerCase().trim()
+    answers = answers.filter(a => a.toLowerCase().includes(keyword))
+  }
+
+  return answers
+}
+
+function getVisibleAnswers(questionId: string, textAnswers: string[]): string[] {
+  const state = getTextState(questionId)
+  const sorted = getSortedAnswers(questionId, textAnswers)
+  if (state.expanded) {
+    return sorted
+  }
+  return sorted.slice(0, state.visibleCount)
+}
+
+function toggleExpand(questionId: string) {
+  const state = getTextState(questionId)
+  state.expanded = !state.expanded
+}
+
+function setSortBy(questionId: string, sortBy: 'default' | 'latest' | 'longest') {
+  const state = getTextState(questionId)
+  state.sortBy = sortBy
+}
+
+function highlightKeyword(text: string, keyword: string): string {
+  if (!keyword.trim()) return text
+  const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+  return text.replace(regex, '<mark class="keyword-highlight">$1</mark>')
+}
 
 const questionnaireId = computed(() => route.params.id as string)
 
@@ -217,16 +279,77 @@ function goBack() {
                 <WordCloudView :data="getWordCloudData(q.questionId)" />
               </div>
 
-              <div class="text-answers">
-                <p class="text-hint">文本回答列表（共 {{ q.totalResponses }} 条）</p>
+              <div class="text-browser">
+                <div class="browser-header">
+                  <div class="browser-title">
+                    <span class="browser-icon">📝</span>
+                    文本回答浏览
+                    <span class="answer-count-badge">共 {{ q.totalResponses }} 条</span>
+                  </div>
+                  <button
+                    class="btn-collapse"
+                    @click="toggleExpand(q.questionId)"
+                  >
+                    {{ getTextState(q.questionId).expanded ? '收起' : '展开' }}
+                    <span class="collapse-icon">{{ getTextState(q.questionId).expanded ? '▲' : '▼' }}</span>
+                  </button>
+                </div>
+
+                <div class="browser-toolbar">
+                  <div class="sort-group">
+                    <span class="toolbar-label">排序：</span>
+                    <button
+                      :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'default' }]"
+                      @click="setSortBy(q.questionId, 'default')"
+                    >
+                      默认
+                    </button>
+                    <button
+                      :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'latest' }]"
+                      @click="setSortBy(q.questionId, 'latest')"
+                    >
+                      最新
+                    </button>
+                    <button
+                      :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'longest' }]"
+                      @click="setSortBy(q.questionId, 'longest')"
+                    >
+                      最长
+                    </button>
+                  </div>
+                  <div class="search-group">
+                    <input
+                      type="text"
+                      v-model="getTextState(q.questionId).keyword"
+                      class="search-input"
+                      placeholder="搜索关键词..."
+                    />
+                    <span v-if="getTextState(q.questionId).keyword && q.textAnswers" class="search-result-count">
+                      {{ getSortedAnswers(q.questionId, q.textAnswers).length }} 条匹配
+                    </span>
+                  </div>
+                </div>
+
                 <div v-if="q.textAnswers && q.textAnswers.length > 0" class="text-answer-list">
                   <div
-                    v-for="(answer, index) in q.textAnswers"
+                    v-for="(answer, index) in getVisibleAnswers(q.questionId, q.textAnswers)"
                     :key="index"
                     class="text-answer-item"
                   >
-                    <span class="answer-number">{{ index + 1 }}.</span>
-                    <span class="answer-content">{{ answer }}</span>
+                    <span class="answer-number">{{ getSortedAnswers(q.questionId, q.textAnswers!).indexOf(answer) + 1 }}.</span>
+                    <span
+                      class="answer-content"
+                      v-html="highlightKeyword(answer, getTextState(q.questionId).keyword)"
+                    ></span>
+                    <span class="answer-length">{{ answer.length }}字</span>
+                  </div>
+
+                  <div
+                    v-if="!getTextState(q.questionId).expanded && getSortedAnswers(q.questionId, q.textAnswers).length > getTextState(q.questionId).visibleCount"
+                    class="expand-hint"
+                    @click="toggleExpand(q.questionId)"
+                  >
+                    还有 {{ getSortedAnswers(q.questionId, q.textAnswers).length - getTextState(q.questionId).visibleCount }} 条回答，点击展开查看全部
                   </div>
                 </div>
                 <p v-else class="text-empty">暂无回答内容</p>
@@ -390,65 +513,207 @@ function goBack() {
   border: 1px solid var(--color-border);
 }
 
-.section-subtitle {
+.text-browser {
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: white;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.browser-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--color-text);
-  margin-bottom: 16px;
 }
 
-.subtitle-icon {
-  font-size: 20px;
+.browser-icon {
+  font-size: 18px;
 }
 
-.text-answers {
-  padding: 20px;
-  background: var(--color-bg);
-  border-radius: var(--radius);
+.answer-count-badge {
+  background: var(--color-primary);
+  color: white;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
 }
 
-.text-hint {
+.btn-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-collapse:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.collapse-icon {
+  font-size: 10px;
+}
+
+.browser-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: #FAFAFA;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-label {
+  font-size: 13px;
   color: var(--color-text-secondary);
-  font-size: 14px;
-  margin-bottom: 12px;
+}
+
+.sort-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  background: white;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.sort-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-input {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  width: 200px;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.search-result-count {
+  font-size: 12px;
+  color: var(--color-primary);
+  font-weight: 500;
 }
 
 .text-answer-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .text-answer-item {
   display: flex;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 18px;
   background: white;
-  border-radius: 6px;
-  border-left: 3px solid var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
+  align-items: flex-start;
+}
+
+.text-answer-item:last-child {
+  border-bottom: none;
 }
 
 .answer-number {
   font-weight: 600;
   color: var(--color-primary);
   flex-shrink: 0;
+  font-size: 13px;
+  padding-top: 1px;
 }
 
 .answer-content {
   font-size: 14px;
   color: var(--color-text);
   word-break: break-word;
-  line-height: 1.5;
+  line-height: 1.6;
+  flex: 1;
+}
+
+.answer-length {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.keyword-highlight {
+  background: #FEF08A;
+  color: var(--color-text);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.expand-hint {
+  padding: 14px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-primary);
+  cursor: pointer;
+  background: #F0F9FF;
+  transition: background 0.2s;
+}
+
+.expand-hint:hover {
+  background: #E0F2FE;
 }
 
 .text-empty {
   color: var(--color-text-secondary);
   font-size: 14px;
   text-align: center;
-  padding: 16px;
+  padding: 40px 20px;
 }
 
 .answer-breakdown {
