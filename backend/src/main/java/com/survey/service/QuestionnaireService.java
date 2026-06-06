@@ -23,6 +23,7 @@ public class QuestionnaireService {
     private final RedisService redisService;
     private final ObjectMapper objectMapper;
     private final FingerprintService fingerprintService;
+    private final SnapshotService snapshotService;
 
     public List<QuestionnaireDTO> getAllQuestionnaires() {
         List<Questionnaire> questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
@@ -88,6 +89,8 @@ public class QuestionnaireService {
             return null;
         }
 
+        String oldStatus = questionnaire.getStatus();
+
         questionnaire.setTitle(dto.getTitle());
         questionnaire.setDescription(dto.getDescription());
         questionnaire.setDeadline(dto.getDeadline());
@@ -134,6 +137,11 @@ public class QuestionnaireService {
         }
 
         questionnaire = questionnaireRepository.save(questionnaire);
+
+        if (dto.getStatus() != null && "closed".equals(dto.getStatus()) && !"closed".equals(oldStatus)) {
+            snapshotService.createSnapshot(id, "closed");
+        }
+
         return toDTO(questionnaire);
     }
 
