@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '../services/api'
 import type { Questionnaire, Fingerprint, FingerprintStatistics } from '../types'
@@ -22,6 +22,9 @@ const loading = ref(true)
 const activeTab = ref<'overview' | 'fingerprints' | 'risky' | 'clusters'>('overview')
 const filterRiskLevel = ref<string>('all')
 const searchKeyword = ref('')
+
+let riskChart: echarts.ECharts | null = null
+let trendChart: echarts.ECharts | null = null
 
 const questionnaireId = computed(() => route.params.id as string)
 
@@ -62,11 +65,12 @@ async function loadData() {
     fingerprintStats.value = await api.getFingerprintStatistics(questionnaireId.value)
     fingerprints.value = await api.getFingerprints(questionnaireId.value)
     riskyFingerprints.value = await api.getRiskyFingerprints(questionnaireId.value)
-    
-    await nextTick()
-    renderCharts()
   } finally {
     loading.value = false
+    await nextTick()
+    if (activeTab.value === 'overview') {
+      renderCharts()
+    }
   }
 }
 
@@ -75,11 +79,30 @@ function renderCharts() {
   renderTrendChart()
 }
 
+function resizeCharts() {
+  if (riskChart) riskChart.resize()
+  if (trendChart) trendChart.resize()
+}
+
+function disposeCharts() {
+  if (riskChart) {
+    riskChart.dispose()
+    riskChart = null
+  }
+  if (trendChart) {
+    trendChart.dispose()
+    trendChart = null
+  }
+}
+
 function renderRiskChart() {
   const chartDom = document.getElementById('risk-chart')
   if (!chartDom || !fingerprintStats.value) return
 
-  const chart = echarts.init(chartDom)
+  if (riskChart) {
+    riskChart.dispose()
+  }
+  riskChart = echarts.init(chartDom)
   const distribution = fingerprintStats.value.riskDistribution || {}
   
   const data = [
@@ -125,14 +148,17 @@ function renderRiskChart() {
     ]
   }
 
-  chart.setOption(option)
+  riskChart.setOption(option)
 }
 
 function renderTrendChart() {
   const chartDom = document.getElementById('trend-chart')
   if (!chartDom || !fingerprintStats.value) return
 
-  const chart = echarts.init(chartDom)
+  if (trendChart) {
+    trendChart.dispose()
+  }
+  trendChart = echarts.init(chartDom)
   const dailyTrend = fingerprintStats.value.dailyTrend || []
   
   const sorted = [...dailyTrend].sort((a, b) => a.date.localeCompare(b.date))
@@ -187,8 +213,23 @@ function renderTrendChart() {
     ]
   }
 
-  chart.setOption(option)
+  trendChart.setOption(option)
 }
+
+watch(activeTab, async (newTab) => {
+  if (newTab === 'overview' && !loading.value) {
+    await nextTick()
+    if (!riskChart || !trendChart) {
+      renderCharts()
+    } else {
+      resizeCharts()
+    }
+  }
+})
+
+onUnmounted(() => {
+  disposeCharts()
+})
 
 function getRiskBadgeClass(level: string) {
   return riskLevelLabels[level] || riskLevelLabels.normal

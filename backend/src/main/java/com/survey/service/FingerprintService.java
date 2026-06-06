@@ -41,10 +41,8 @@ public class FingerprintService {
         fingerprint.setUserAgentHash(uaHash);
 
         String combinedFingerprint = generateCombinedFingerprint(
-                request.getRespondentId(),
                 ipHash,
-                uaHash,
-                request.getAnswers()
+                uaHash
         );
         fingerprint.setFingerprintHash(combinedFingerprint);
 
@@ -135,12 +133,8 @@ public class FingerprintService {
         fingerprint.setRiskReasons(String.join("; ", riskReasons));
     }
 
-    private String generateCombinedFingerprint(String respondentId,
-                                               String ipHash,
-                                               String uaHash,
-                                               List<SubmitRequest.AnswerDTO> answers) {
+    private String generateCombinedFingerprint(String ipHash, String uaHash) {
         StringBuilder sb = new StringBuilder();
-        sb.append(respondentId).append("|");
         sb.append(ipHash).append("|");
         sb.append(uaHash);
         return hashString(sb.toString());
