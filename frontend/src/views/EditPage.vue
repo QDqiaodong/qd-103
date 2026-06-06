@@ -83,17 +83,26 @@ function goToSnapshot(id: string) {
 }
 
 function getSnapshotReasonLabel(reason: string): string {
+  if (reason.startsWith('manual_')) {
+    return '手动快照'
+  }
   const reasonMap: Record<string, string> = {
     'closed_closed': '手动关闭封卷',
-    'expired_expired': '到期自动封卷',
-    'manual': '手动快照'
+    'expired': '到期自动封卷'
   }
   return reasonMap[reason] || reason
 }
 
 function getSnapshotReasonClass(reason: string): string {
-  if (reason.startsWith('closed')) return 'reason-closed'
-  if (reason.startsWith('expired')) return 'reason-expired'
+  if (reason.startsWith('manual_')) {
+    return 'reason-manual'
+  }
+  if (reason.startsWith('closed')) {
+    return 'reason-closed'
+  }
+  if (reason === 'expired' || reason.startsWith('expired')) {
+    return 'reason-expired'
+  }
   return 'reason-manual'
 }
 
