@@ -2,11 +2,16 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
-import type { QuestionType, QuestionnaireStatus, Question, QuestionOption, CoverConfig } from '../types'
+import type { QuestionType, QuestionnaireStatus, Question, QuestionOption, CoverConfig, Snapshot } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
 import QuestionEditor from '../components/QuestionEditor.vue'
 import CoverEditor from '../components/CoverEditor.vue'
 import CoverPreview from '../components/CoverPreview.vue'
+<<<<<<< HEAD
+=======
+import { isDeadlineRisk, getDeadlineRiskInfo } from '../lib/utils'
+import * as api from '../services/api'
+>>>>>>> b6ba3cf70efb635dc5b728142ce289d8913e4561
 
 const route = useRoute()
 const router = useRouter()
@@ -18,12 +23,21 @@ const deadline = ref('')
 const status = ref<QuestionnaireStatus>('active')
 const questions = ref<(Question & { options?: QuestionOption[] })[]>([])
 const saving = ref(false)
-const activeTab = ref<'questions' | 'cover'>('questions')
+const activeTab = ref<'questions' | 'cover' | 'snapshots'>('questions')
 const coverConfig = ref<CoverConfig>({ ...DEFAULT_COVER_CONFIG })
+
+const snapshots = ref<Snapshot[]>([])
+const snapshotsLoading = ref(false)
+const creatingSnapshot = ref(false)
 
 const questionnaireId = computed(() => route.params.id as string)
 
 onMounted(async () => {
+  const tabParam = route.query.tab as string
+  if (tabParam === 'snapshots' || tabParam === 'cover' || tabParam === 'questions') {
+    activeTab.value = tabParam
+  }
+
   await store.fetchQuestionnaire(questionnaireId.value)
   if (store.currentQuestionnaire) {
     title.value = store.currentQuestionnaire.title
@@ -35,7 +49,76 @@ onMounted(async () => {
       coverConfig.value = { ...DEFAULT_COVER_CONFIG, ...store.currentQuestionnaire.coverConfig }
     }
   }
+  await loadSnapshots()
 })
+
+async function loadSnapshots() {
+  snapshotsLoading.value = true
+  try {
+    snapshots.value = await api.getSnapshots(questionnaireId.value)
+  } catch (e) {
+    console.error('加载快照列表失败', e)
+  } finally {
+    snapshotsLoading.value = false
+  }
+}
+
+async function createSnapshot() {
+  if (!confirm('确定要创建当前问卷的快照吗？快照将固化当前的题目结构和统计数据。')) {
+    return
+  }
+  creatingSnapshot.value = true
+  try {
+    const result = await api.createSnapshot(questionnaireId.value)
+    if (result) {
+      alert('快照创建成功')
+      await loadSnapshots()
+    }
+  } catch (e: any) {
+    alert(e.message || '创建快照失败')
+  } finally {
+    creatingSnapshot.value = false
+  }
+}
+
+function goToSnapshot(id: string) {
+  router.push(`/snapshot/${id}`)
+}
+
+function getSnapshotReasonLabel(reason: string): string {
+  if (reason.startsWith('manual_')) {
+    return '手动快照'
+  }
+  const reasonMap: Record<string, string> = {
+    'closed_closed': '手动关闭封卷',
+    'expired': '到期自动封卷'
+  }
+  return reasonMap[reason] || reason
+}
+
+function getSnapshotReasonClass(reason: string): string {
+  if (reason.startsWith('manual_')) {
+    return 'reason-manual'
+  }
+  if (reason.startsWith('closed')) {
+    return 'reason-closed'
+  }
+  if (reason === 'expired' || reason.startsWith('expired')) {
+    return 'reason-expired'
+  }
+  return 'reason-manual'
+}
+
+function formatSnapshotDate(dateStr?: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 const canSave = computed(() => {
   return title.value.trim() && questions.value.length > 0
@@ -115,6 +198,7 @@ async function saveQuestionnaire() {
     const result = await store.updateQuestionnaire(questionnaireId.value, data)
     if (result) {
       alert('保存成功')
+      await loadSnapshots()
     } else {
       alert(store.error || '保存失败')
     }
@@ -227,6 +311,13 @@ function copyLink() {
             >
               封面设置
             </button>
+            <button
+              :class="['main-tab', { active: activeTab === 'snapshots' }]"
+              @click="activeTab = 'snapshots'"
+            >
+              历史快照
+              <span v-if="snapshots.length" class="tab-badge">{{ snapshots.length }}</span>
+            </button>
           </div>
 
           <div v-if="activeTab === 'questions'" class="tab-panel">
@@ -287,6 +378,73 @@ function copyLink() {
                   :title="title"
                   :description="description"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'snapshots'" class="tab-panel">
+            <div class="snapshots-header">
+              <div>
+                <h2 class="panel-title">历史封卷快照</h2>
+                <p class="snapshots-desc">
+                  快照会固化当时的题目结构、问卷状态和统计结果，不可编辑，用于活动结案、数据复盘和过程留痕
+                </p>
+              </div>
+              <button
+                class="btn btn-primary"
+                :disabled="creatingSnapshot"
+                @click="createSnapshot"
+              >
+                {{ creatingSnapshot ? '创建中...' : '+ 创建快照' }}
+              </button>
+            </div>
+
+            <div v-if="snapshotsLoading" class="snapshots-loading">
+              加载中...
+            </div>
+
+            <div v-else-if="snapshots.length === 0" class="snapshots-empty">
+              <div class="empty-icon">📦</div>
+              <p>暂无快照记录</p>
+              <p class="hint">问卷关闭或过期时会自动生成快照，也可以手动创建</p>
+            </div>
+
+            <div v-else class="snapshots-list">
+              <div
+                v-for="snapshot in snapshots"
+                :key="snapshot.id"
+                class="snapshot-item card"
+                @click="goToSnapshot(snapshot.id)"
+              >
+                <div class="snapshot-item-header">
+                  <div class="snapshot-item-title">
+                    <span class="snapshot-icon">📜</span>
+                    <span class="snapshot-title-text">{{ snapshot.title || '未命名问卷' }}</span>
+                  </div>
+                  <span
+                    class="snapshot-reason-badge"
+                    :class="getSnapshotReasonClass(snapshot.snapshotReason)"
+                  >
+                    {{ getSnapshotReasonLabel(snapshot.snapshotReason) }}
+                  </span>
+                </div>
+                <div class="snapshot-item-meta">
+                  <span class="meta-item">
+                    <span class="meta-label">封卷时间：</span>
+                    <span class="meta-value">{{ formatSnapshotDate(snapshot.snapshotAt) }}</span>
+                  </span>
+                  <span class="meta-item">
+                    <span class="meta-label">题目数：</span>
+                    <span class="meta-value">{{ snapshot.questionCount || 0 }} 题</span>
+                  </span>
+                  <span class="meta-item">
+                    <span class="meta-label">填写数：</span>
+                    <span class="meta-value">{{ snapshot.responseCount || 0 }} 人</span>
+                  </span>
+                </div>
+                <div class="snapshot-item-action">
+                  查看快照 →
+                </div>
               </div>
             </div>
           </div>
@@ -464,6 +622,151 @@ function copyLink() {
 
   .settings-panel {
     position: static;
+  }
+}
+
+.snapshots-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.snapshots-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.snapshots-loading,
+.snapshots-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--color-text-secondary);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.snapshots-empty p {
+  margin: 4px 0;
+}
+
+.snapshots-empty .hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.snapshots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.snapshot-item {
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--color-border);
+}
+
+.snapshot-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.snapshot-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.snapshot-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.snapshot-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.snapshot-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-reason-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.reason-closed {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.reason-expired {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+.reason-manual {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.snapshot-item-meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.snapshot-item-meta .meta-item {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.snapshot-item-meta .meta-value {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.snapshot-item-action {
+  text-align: right;
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+@media (max-width: 768px) {
+  .snapshots-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .snapshot-item-meta {
+    gap: 12px;
   }
 }
 </style>

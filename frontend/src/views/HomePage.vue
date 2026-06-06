@@ -91,6 +91,10 @@ function goToFingerprint(id: string) {
   router.push(`/fingerprint/${id}`)
 }
 
+function goToSnapshots(id: string) {
+  router.push(`/edit/${id}?tab=snapshots`)
+}
+
 function copyLink(id: string) {
   const link = `${window.location.origin}/fill/${id}`
   navigator.clipboard.writeText(link)
@@ -253,6 +257,12 @@ function getThemeColor(q: Questionnaire): string {
               @click="goToFingerprint(q.id)"
             >
               指纹
+            </button>
+            <button
+              class="btn btn-outline"
+              @click="goToSnapshots(q.id)"
+            >
+              快照
             </button>
             <button
               class="btn btn-outline"
