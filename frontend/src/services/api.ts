@@ -5,9 +5,7 @@ import type {
   StatisticsResponse,
   SubmitRequest,
   Fingerprint,
-  FingerprintStatistics,
-  Snapshot,
-  SnapshotDetail
+  FingerprintStatistics
 } from '../types'
 
 const BASE_URL = '/api'
@@ -127,34 +125,6 @@ export function getRespondentId(): string {
     localStorage.setItem(key, id)
   }
   return id
-}
-
-// 获取问卷的快照列表
-export async function getSnapshots(questionnaireId: string): Promise<Snapshot[]> {
-  const response = await api.get<ApiResponse<Snapshot[]>>(`/snapshots/questionnaire/${questionnaireId}`)
-  if (!isSuccess(response)) {
-    throw new Error(getErrorMessage(response, '获取快照列表失败'))
-  }
-  return response.data.data || []
-}
-
-// 获取快照详情
-export async function getSnapshot(id: string): Promise<SnapshotDetail | null> {
-  const response = await api.get<ApiResponse<SnapshotDetail>>(`/snapshots/${id}`)
-  if (!isSuccess(response)) {
-    throw new Error(getErrorMessage(response, '获取快照详情失败'))
-  }
-  return response.data.data || null
-}
-
-// 创建快照
-export async function createSnapshot(questionnaireId: string, reason?: string): Promise<Snapshot | null> {
-  const params = reason ? { reason } : {}
-  const response = await api.post<ApiResponse<Snapshot>>(`/snapshots/questionnaire/${questionnaireId}`, null, { params })
-  if (!isSuccess(response)) {
-    throw new Error(getErrorMessage(response, '创建快照失败'))
-  }
-  return response.data.data || null
 }
 
 export default api

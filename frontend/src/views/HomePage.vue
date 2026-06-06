@@ -4,7 +4,46 @@ import { useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
 import type { Questionnaire, QuestionnaireStatus, CoverTheme } from '../types'
 import { COVER_THEMES, DEFAULT_COVER_CONFIG } from '../types'
-import { getHeatLevel, getDeadlineInfo, isDeadlineRisk, getDeadlineRiskInfo } from '../lib/utils'
+
+function getHeatLevel(q: Questionnaire): { level: number; label: string; color: string } {
+  const count = q.responseCount || 0
+  const createdAt = new Date(q.createdAt).getTime()
+  const now = Date.now()
+  const daysActive = Math.max(1, (now - createdAt) / (1000 * 60 * 60 * 24))
+  const avgPerDay = count / daysActive
+
+  if (avgPerDay >= 20) return { level: 5, label: '爆热', color: '#EF4444' }
+  if (avgPerDay >= 10) return { level: 4, label: '火热', color: '#F97316' }
+  if (avgPerDay >= 5) return { level: 3, label: '活跃', color: '#F59E0B' }
+  if (avgPerDay >= 2) return { level: 2, label: '平稳', color: '#10B981' }
+  return { level: 1, label: '冷清', color: '#9CA3AF' }
+}
+
+function getDeadlineInfo(q: Questionnaire): { daysLeft: number | null; urgency: 'critical' | 'warning' | 'normal' | 'none'; label: string } {
+  if (!q.deadline || q.status !== 'active') {
+    return { daysLeft: null, urgency: 'none', label: '' }
+  }
+  const deadline = new Date(q.deadline).getTime()
+  const now = Date.now()
+  const daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24))
+
+  if (daysLeft <= 0) {
+    return { daysLeft: 0, urgency: 'critical', label: '已截止' }
+  }
+  if (daysLeft <= 2) {
+    return { daysLeft, urgency: 'critical', label: `剩 ${daysLeft} 天` }
+  }
+  if (daysLeft <= 7) {
+    return { daysLeft, urgency: 'warning', label: `剩 ${daysLeft} 天` }
+  }
+  return { daysLeft, urgency: 'normal', label: `剩 ${daysLeft} 天` }
+}
+
+function needsAttention(q: Questionnaire): boolean {
+  const deadlineInfo = getDeadlineInfo(q)
+  const heat = getHeatLevel(q)
+  return deadlineInfo.urgency === 'critical' && heat.level <= 2
+}
 
 const router = useRouter()
 const store = useQuestionnaireStore()
@@ -50,10 +89,6 @@ function goToStatistics(id: string) {
 
 function goToFingerprint(id: string) {
   router.push(`/fingerprint/${id}`)
-}
-
-function goToSnapshots(id: string) {
-  router.push(`/edit/${id}?tab=snapshots`)
 }
 
 function copyLink(id: string) {
@@ -144,7 +179,7 @@ function getThemeColor(q: Questionnaire): string {
           <div class="card-header">
             <h3 class="card-title">
               {{ q.title || '未命名问卷' }}
-              <span v-if="isDeadlineRisk(q)" class="attention-badge" title="临近截止且回收偏低，需重点关注">⚠ 待关注</span>
+              <span v-if="needsAttention(q)" class="attention-badge" title="临近截止且回收偏低，需重点关注">⚠ 待关注</span>
             </h3>
             <div class="card-badges">
               <span class="theme-badge" :style="{ background: getThemeColor(q) + '15', color: getThemeColor(q) }">
@@ -154,17 +189,6 @@ function getThemeColor(q: Questionnaire): string {
                 {{ getStatusBadge(q.status).text }}
               </span>
             </div>
-          </div>
-
-          <div v-if="isDeadlineRisk(q)" class="deadline-risk-bar">
-            <div class="risk-bar-icon">⚠️</div>
-            <div class="risk-bar-content">
-              <div class="risk-bar-message">{{ getDeadlineRiskInfo(q).message }}</div>
-              <div class="risk-bar-tips">{{ getDeadlineRiskInfo(q).tips }}</div>
-            </div>
-            <button class="risk-bar-action" @click.stop="goToStatistics(q.id)">
-              查看数据
-            </button>
           </div>
 
           <p class="card-description">{{ q.description || '暂无描述' }}</p>
@@ -229,12 +253,6 @@ function getThemeColor(q: Questionnaire): string {
               @click="goToFingerprint(q.id)"
             >
               指纹
-            </button>
-            <button
-              class="btn btn-outline"
-              @click="goToSnapshots(q.id)"
-            >
-              快照
             </button>
             <button
               class="btn btn-outline"
@@ -495,61 +513,5 @@ function getThemeColor(q: Questionnaire): string {
 .card-actions .btn {
   padding: 6px 12px;
   font-size: 13px;
-}
-
-.deadline-risk-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-  border: 1px solid #F59E0B;
-  border-radius: 8px;
-  animation: risk-pulse 2s ease-in-out infinite;
-}
-
-@keyframes risk-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.2); }
-  50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1); }
-}
-
-.risk-bar-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.risk-bar-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.risk-bar-message {
-  font-size: 13px;
-  font-weight: 600;
-  color: #92400E;
-  margin-bottom: 2px;
-}
-
-.risk-bar-tips {
-  font-size: 11px;
-  color: #B45309;
-}
-
-.risk-bar-action {
-  flex-shrink: 0;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-  background: #F59E0B;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.risk-bar-action:hover {
-  background: #D97706;
-  transform: translateY(-1px);
 }
 </style>

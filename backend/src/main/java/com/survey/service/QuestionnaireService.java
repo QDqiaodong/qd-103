@@ -23,22 +23,9 @@ public class QuestionnaireService {
     private final RedisService redisService;
     private final ObjectMapper objectMapper;
     private final FingerprintService fingerprintService;
-    private final SnapshotService snapshotService;
 
     public List<QuestionnaireDTO> getAllQuestionnaires() {
         List<Questionnaire> questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
-
-        LocalDateTime now = LocalDateTime.now();
-        for (Questionnaire q : questionnaires) {
-            if ("active".equals(q.getStatus())
-                    && q.getDeadline() != null
-                    && q.getDeadline().isBefore(now)) {
-                processExpiredQuestionnaire(q.getId());
-            }
-        }
-
-        questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
-
         return questionnaires.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
@@ -49,37 +36,7 @@ public class QuestionnaireService {
         if (questionnaire == null) {
             return null;
         }
-
-        if ("active".equals(questionnaire.getStatus())
-                && questionnaire.getDeadline() != null
-                && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
-            processExpiredQuestionnaire(id);
-            questionnaire = questionnaireRepository.findByIdWithQuestions(id);
-        }
-
         return toDTO(questionnaire);
-    }
-
-    @Transactional
-    public void processExpiredQuestionnaire(String questionnaireId) {
-        Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(questionnaireId);
-        if (questionnaire == null) {
-            return;
-        }
-
-        if (!"active".equals(questionnaire.getStatus())) {
-            return;
-        }
-
-        if (questionnaire.getDeadline() == null
-                || !questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
-            return;
-        }
-
-        questionnaire.setStatus("expired");
-        questionnaireRepository.save(questionnaire);
-
-        snapshotService.createSnapshot(questionnaireId, "expired");
     }
 
     @Transactional
@@ -131,8 +88,6 @@ public class QuestionnaireService {
             return null;
         }
 
-        String oldStatus = questionnaire.getStatus();
-
         questionnaire.setTitle(dto.getTitle());
         questionnaire.setDescription(dto.getDescription());
         questionnaire.setDeadline(dto.getDeadline());
@@ -146,89 +101,39 @@ public class QuestionnaireService {
         questionnaire = questionnaireRepository.save(questionnaire);
 
         if (dto.getQuestions() != null) {
-            Map<String, Question> existingQuestions = questionnaire.getQuestions().stream()
-                    .collect(Collectors.toMap(Question::getId, q -> q));
-
-            Set<String> dtoQuestionIds = dto.getQuestions().stream()
-                    .map(QuestionDTO::getId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-
-            List<String> deletedQuestionIds = existingQuestions.keySet().stream()
-                    .filter(qid -> !dtoQuestionIds.contains(qid))
+            List<String> oldQuestionIds = questionnaire.getQuestions().stream()
+                    .map(Question::getId)
                     .toList();
-            if (!deletedQuestionIds.isEmpty()) {
-                answerRepository.deleteByQuestionIds(deletedQuestionIds);
+            if (!oldQuestionIds.isEmpty()) {
+                answerRepository.deleteByQuestionIds(oldQuestionIds);
             }
+            questionnaire.getQuestions().clear();
 
-            questionnaire.getQuestions().removeIf(q -> deletedQuestionIds.contains(q.getId()));
-
-            List<Question> updatedQuestions = new ArrayList<>();
             for (QuestionDTO qdto : dto.getQuestions()) {
-                Question question;
-                boolean isNewQuestion = qdto.getId() == null || !existingQuestions.containsKey(qdto.getId());
-
-                if (isNewQuestion) {
-                    question = new Question();
-                    question.setId(UUID.randomUUID().toString());
-                    question.setQuestionnaire(questionnaire);
-                } else {
-                    question = existingQuestions.get(qdto.getId());
-                }
-
-                String oldType = question.getType();
+                Question question = new Question();
+                question.setId(UUID.randomUUID().toString());
+                question.setQuestionnaire(questionnaire);
                 question.setType(qdto.getType());
                 question.setContent(qdto.getContent());
                 question.setOrderIndex(qdto.getOrderIndex());
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
 
-                if (!isNewQuestion && oldType != null && !oldType.equals(qdto.getType())) {
-                    answerRepository.deleteByQuestionId(question.getId());
-                    question.getOptions().clear();
-                }
-
                 if (qdto.getOptions() != null) {
-                    Map<String, OptionItem> existingOptions = question.getOptions().stream()
-                            .collect(Collectors.toMap(OptionItem::getId, o -> o));
-
-                    Set<String> dtoOptionIds = qdto.getOptions().stream()
-                            .map(OptionDTO::getId)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toSet());
-
-                    question.getOptions().removeIf(o -> !dtoOptionIds.contains(o.getId()));
-
-                    List<OptionItem> updatedOptions = new ArrayList<>();
                     for (OptionDTO odto : qdto.getOptions()) {
-                        OptionItem option;
-                        if (odto.getId() == null || !existingOptions.containsKey(odto.getId())) {
-                            option = new OptionItem();
-                            option.setId(UUID.randomUUID().toString());
-                            option.setQuestion(question);
-                        } else {
-                            option = existingOptions.get(odto.getId());
-                        }
+                        OptionItem option = new OptionItem();
+                        option.setId(UUID.randomUUID().toString());
+                        option.setQuestion(question);
                         option.setContent(odto.getContent());
                         option.setOrderIndex(odto.getOrderIndex());
-                        updatedOptions.add(option);
+                        question.getOptions().add(option);
                     }
-                    question.getOptions().clear();
-                    question.getOptions().addAll(updatedOptions);
                 }
 
-                updatedQuestions.add(question);
+                questionnaire.getQuestions().add(question);
             }
-
-            questionnaire.getQuestions().clear();
-            questionnaire.getQuestions().addAll(updatedQuestions);
         }
 
         questionnaire = questionnaireRepository.save(questionnaire);
-
-        if (dto.getStatus() != null && "closed".equals(dto.getStatus()) && !"closed".equals(oldStatus)) {
-            snapshotService.createSnapshot(id, "closed");
-        }
-
         return toDTO(questionnaire);
     }
 
@@ -335,7 +240,7 @@ public class QuestionnaireService {
 
             qs.setTotalResponses(questionAnswers.size());
 
-            Map<String, Integer> statistics = new LinkedHashMap<>();
+            Map<String, Integer> statistics = new HashMap<>();
             List<String> textAnswers = new ArrayList<>();
 
             if ("text".equals(question.getType())) {
@@ -347,13 +252,7 @@ public class QuestionnaireService {
                 }
                 statistics.put("text_responses", textAnswers.size());
             } else {
-                Map<String, String> optionIdToContent = new HashMap<>();
-                Set<String> optionIds = new HashSet<>();
-                Set<String> optionContents = new HashSet<>();
                 for (OptionItem option : question.getOptions()) {
-                    optionIdToContent.put(option.getId(), option.getContent());
-                    optionIds.add(option.getId());
-                    optionContents.add(option.getContent());
                     statistics.put(option.getContent(), 0);
                 }
 
@@ -364,18 +263,11 @@ public class QuestionnaireService {
                             for (String v : value.split(",")) {
                                 String trimmed = v.trim();
                                 if (!trimmed.isEmpty()) {
-                                    String optionContent = resolveOptionContent(trimmed, optionIds, optionContents, optionIdToContent);
-                                    if (optionContent != null) {
-                                        statistics.merge(optionContent, 1, Integer::sum);
-                                    }
+                                    statistics.merge(trimmed, 1, Integer::sum);
                                 }
                             }
                         } else {
-                            String trimmed = value.trim();
-                            String optionContent = resolveOptionContent(trimmed, optionIds, optionContents, optionIdToContent);
-                            if (optionContent != null) {
-                                statistics.merge(optionContent, 1, Integer::sum);
-                            }
+                            statistics.merge(value.trim(), 1, Integer::sum);
                         }
                     }
                 }
@@ -388,16 +280,6 @@ public class QuestionnaireService {
 
         stats.setQuestions(questionStats);
         return stats;
-    }
-
-    private String resolveOptionContent(String value, Set<String> optionIds, Set<String> optionContents, Map<String, String> optionIdToContent) {
-        if (optionIds.contains(value)) {
-            return optionIdToContent.get(value);
-        }
-        if (optionContents.contains(value)) {
-            return value;
-        }
-        return null;
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire) {
