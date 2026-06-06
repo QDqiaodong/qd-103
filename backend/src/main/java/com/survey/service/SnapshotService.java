@@ -31,9 +31,20 @@ public class SnapshotService {
             return null;
         }
 
-        String snapshotKey = reason + "_" + questionnaire.getStatus();
-        if (snapshotRepository.existsByQuestionnaireIdAndSnapshotReason(questionnaireId, snapshotKey)) {
-            return null;
+        String snapshotKey;
+        boolean isManual = "manual".equals(reason);
+        if (isManual) {
+            snapshotKey = "manual_" + System.currentTimeMillis();
+        } else if ("expired".equals(reason)) {
+            snapshotKey = "expired";
+            if (snapshotRepository.existsByQuestionnaireIdAndSnapshotReason(questionnaireId, snapshotKey)) {
+                return null;
+            }
+        } else {
+            snapshotKey = reason + "_" + questionnaire.getStatus();
+            if (snapshotRepository.existsByQuestionnaireIdAndSnapshotReason(questionnaireId, snapshotKey)) {
+                return null;
+            }
         }
 
         QuestionnaireSnapshot snapshot = new QuestionnaireSnapshot();
