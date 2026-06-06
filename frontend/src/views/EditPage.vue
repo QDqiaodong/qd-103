@@ -7,11 +7,7 @@ import { DEFAULT_COVER_CONFIG } from '../types'
 import QuestionEditor from '../components/QuestionEditor.vue'
 import CoverEditor from '../components/CoverEditor.vue'
 import CoverPreview from '../components/CoverPreview.vue'
-<<<<<<< HEAD
-=======
-import { isDeadlineRisk, getDeadlineRiskInfo } from '../lib/utils'
 import * as api from '../services/api'
->>>>>>> b6ba3cf70efb635dc5b728142ce289d8913e4561
 
 const route = useRoute()
 const router = useRouter()
