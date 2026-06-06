@@ -4,12 +4,11 @@ FROM ${DOCKER_REGISTRY}/maven:3.9-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
-COPY .mvn ./.mvn
-COPY pom.xml .
-RUN mvn -B -DskipTests dependency:go-offline
+COPY settings.xml pom.xml ./
+RUN mvn -B -ntp -s settings.xml -DskipTests dependency:go-offline dependency:resolve-plugins
 
 COPY src ./src
-RUN mvn -B -DskipTests package
+RUN mvn -B -ntp -s settings.xml -DskipTests package
 
 FROM ${DOCKER_REGISTRY}/eclipse-temurin:17-jre
 

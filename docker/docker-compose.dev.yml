@@ -6,10 +6,11 @@ services:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
     ports:
-      - "5173:5173"
+      - "${FRONTEND_DEV_PORT:-15173}:5173"
     environment:
       - VITE_API_PROXY_TARGET=http://backend:8080
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+      - NPM_CONFIG_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com/}
+    command: sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm install; fi && npm run dev -- --host 0.0.0.0"
     depends_on:
       - backend
     networks:
@@ -23,17 +24,41 @@ services:
       args:
         DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}
     ports:
-      - "8080:8080"
+      - "${BACKEND_DEV_PORT:-18084}:8080"
     environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-survey_platform}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER:-survey_user}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD:-survey_pass_123}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     depends_on:
+      - mysql
       - redis
+    networks:
+      - survey-network
+
+  mysql:
+    image: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}/mysql:8.0.41
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-survey_platform}
+      MYSQL_USER: ${MYSQL_USER:-survey_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-survey_pass_123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-survey_root_pass_123}
+    ports:
+      - "${MYSQL_DEV_PORT:-13016}:3306"
+    volumes:
+      - mysql-data-dev:/var/lib/mysql
     networks:
       - survey-network
 
   redis:
     image: ${DOCKER_REGISTRY:-docker.m.daocloud.io/library}/redis:7-alpine
+    ports:
+      - "${REDIS_DEV_PORT:-16079}:6379"
     networks:
       - survey-network
 
@@ -43,3 +68,4 @@ networks:
 
 volumes:
   frontend_node_modules:
+  mysql-data-dev:

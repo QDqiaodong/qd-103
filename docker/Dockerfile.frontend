@@ -4,7 +4,7 @@ FROM ${DOCKER_REGISTRY}/node:18-alpine AS builder
 
 WORKDIR /app
 
-COPY .npmrc package*.json ./
+COPY .npmrc package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
