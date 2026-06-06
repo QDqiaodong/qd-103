@@ -10,8 +10,8 @@ const emit = defineEmits<{
   update: [value: string]
 }>()
 
-function selectOption(content: string) {
-  emit('update', content)
+function selectOption(id: string) {
+  emit('update', id)
 }
 </script>
 
@@ -20,15 +20,15 @@ function selectOption(content: string) {
     <label
       v-for="option in question.options"
       :key="option.id"
-      :class="['option-item', { selected: value === option.content }]"
+      :class="['option-item', { selected: value === option.id }]"
     >
       <input
         type="radio"
         :name="question.id"
-        :value="option.content"
-        :checked="value === option.content"
+        :value="option.id"
+        :checked="value === option.id"
         class="option-radio"
-        @change="selectOption(option.content)"
+        @change="selectOption(option.id)"
       />
       <span class="option-marker">
         <span class="marker-dot"></span>

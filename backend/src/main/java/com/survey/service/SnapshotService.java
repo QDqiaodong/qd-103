@@ -121,7 +121,7 @@ public class SnapshotService {
 
             qs.setTotalResponses(questionAnswers.size());
 
-            Map<String, Integer> statistics = new HashMap<>();
+            Map<String, Integer> statistics = new LinkedHashMap<>();
             List<String> textAnswers = new ArrayList<>();
 
             if ("text".equals(question.getType())) {
@@ -133,7 +133,13 @@ public class SnapshotService {
                 }
                 statistics.put("text_responses", textAnswers.size());
             } else {
+                Map<String, String> optionIdToContent = new HashMap<>();
+                Set<String> optionIds = new HashSet<>();
+                Set<String> optionContents = new HashSet<>();
                 for (OptionItem option : question.getOptions()) {
+                    optionIdToContent.put(option.getId(), option.getContent());
+                    optionIds.add(option.getId());
+                    optionContents.add(option.getContent());
                     statistics.put(option.getContent(), 0);
                 }
 
@@ -144,11 +150,18 @@ public class SnapshotService {
                             for (String v : value.split(",")) {
                                 String trimmed = v.trim();
                                 if (!trimmed.isEmpty()) {
-                                    statistics.merge(trimmed, 1, Integer::sum);
+                                    String optionContent = resolveOptionContent(trimmed, optionIds, optionContents, optionIdToContent);
+                                    if (optionContent != null) {
+                                        statistics.merge(optionContent, 1, Integer::sum);
+                                    }
                                 }
                             }
                         } else {
-                            statistics.merge(value.trim(), 1, Integer::sum);
+                            String trimmed = value.trim();
+                            String optionContent = resolveOptionContent(trimmed, optionIds, optionContents, optionIdToContent);
+                            if (optionContent != null) {
+                                statistics.merge(optionContent, 1, Integer::sum);
+                            }
                         }
                     }
                 }
@@ -161,6 +174,16 @@ public class SnapshotService {
 
         stats.setQuestions(questionStats);
         return stats;
+    }
+
+    private String resolveOptionContent(String value, Set<String> optionIds, Set<String> optionContents, Map<String, String> optionIdToContent) {
+        if (optionIds.contains(value)) {
+            return optionIdToContent.get(value);
+        }
+        if (optionContents.contains(value)) {
+            return value;
+        }
+        return null;
     }
 
     public List<SnapshotDTO> getSnapshotsByQuestionnaireId(String questionnaireId) {

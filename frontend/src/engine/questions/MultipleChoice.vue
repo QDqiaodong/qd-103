@@ -10,11 +10,11 @@ const emit = defineEmits<{
   update: [value: string[]]
 }>()
 
-function toggleOption(content: string) {
+function toggleOption(id: string) {
   const newValue = [...props.value]
-  const index = newValue.indexOf(content)
+  const index = newValue.indexOf(id)
   if (index === -1) {
-    newValue.push(content)
+    newValue.push(id)
   } else {
     newValue.splice(index, 1)
   }
@@ -27,17 +27,17 @@ function toggleOption(content: string) {
     <label
       v-for="option in question.options"
       :key="option.id"
-      :class="['option-item', { selected: value.includes(option.content) }]"
+      :class="['option-item', { selected: value.includes(option.id) }]"
     >
       <input
         type="checkbox"
-        :value="option.content"
-        :checked="value.includes(option.content)"
+        :value="option.id"
+        :checked="value.includes(option.id)"
         class="option-checkbox"
-        @change="toggleOption(option.content)"
+        @change="toggleOption(option.id)"
       />
       <span class="option-marker">
-        <span v-if="value.includes(option.content)" class="check-icon">✓</span>
+        <span v-if="value.includes(option.id)" class="check-icon">✓</span>
       </span>
       <span class="option-text">{{ option.content }}</span>
     </label>
