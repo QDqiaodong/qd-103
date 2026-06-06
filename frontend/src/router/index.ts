@@ -37,6 +37,11 @@ const router = createRouter({
       path: '/preview/:id',
       name: 'preview',
       component: () => import('../views/PreviewPage.vue')
+    },
+    {
+      path: '/snapshot/:id',
+      name: 'snapshot',
+      component: () => import('../views/SnapshotPage.vue')
     }
   ]
 })

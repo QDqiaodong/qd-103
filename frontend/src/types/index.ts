@@ -139,6 +139,27 @@ export const COVER_LAYOUTS: Record<CoverLayout, { label: string; description: st
   hero: { label: '头图布局', description: '大图头图，视觉冲击力强' }
 }
 
+export interface Snapshot {
+  id: string
+  questionnaireId: string
+  title: string
+  description: string
+  deadline?: string
+  status: QuestionnaireStatus
+  originalStatus: QuestionnaireStatus
+  snapshotReason: string
+  createdAt: string
+  snapshotAt: string
+  responseCount: number
+  questionCount: number
+  coverConfig?: CoverConfig
+}
+
+export interface SnapshotDetail extends Snapshot {
+  questions: Question[]
+  statistics: StatisticsResponse
+}
+
 export interface ApiResponse<T> {
   code: number
   data?: T
