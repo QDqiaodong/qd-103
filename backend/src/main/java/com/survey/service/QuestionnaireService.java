@@ -27,6 +27,16 @@ public class QuestionnaireService {
 
     public List<QuestionnaireDTO> getAllQuestionnaires() {
         List<Questionnaire> questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Questionnaire q : questionnaires) {
+            if ("active".equals(q.getStatus())
+                    && q.getDeadline() != null
+                    && q.getDeadline().isBefore(now)) {
+                snapshotService.createSnapshot(q.getId(), "expired");
+            }
+        }
+
         return questionnaires.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
@@ -37,7 +47,18 @@ public class QuestionnaireService {
         if (questionnaire == null) {
             return null;
         }
+
+        checkAndCreateExpiredSnapshot(questionnaire);
+
         return toDTO(questionnaire);
+    }
+
+    private void checkAndCreateExpiredSnapshot(Questionnaire questionnaire) {
+        if ("active".equals(questionnaire.getStatus())
+                && questionnaire.getDeadline() != null
+                && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
+            snapshotService.createSnapshot(questionnaire.getId(), "expired");
+        }
     }
 
     @Transactional
