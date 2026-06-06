@@ -40,6 +40,37 @@ export interface Answer {
 export interface SubmitRequest {
   respondentId: string
   answers: Answer[]
+  submitDurationSeconds?: number
+  userAgent?: string
+}
+
+export interface Fingerprint {
+  id: string
+  questionnaireId: string
+  respondentId: string
+  responseId: string
+  fingerprintHash: string
+  submittedAt: string
+  submitDurationSeconds: number
+  answerCount: number
+  riskLevel: 'normal' | 'suspicious' | 'high_risk'
+  riskReasons: string
+  isDuplicateFingerprint: boolean
+  duplicateCount: number
+  isHighFrequency: boolean
+  frequencyWindowMinutes: number
+  frequencyCount: number
+  isAnomalyCluster: boolean
+  clusterSize: number
+}
+
+export interface FingerprintStatistics {
+  totalFingerprints: number
+  distinctFingerprints: number
+  riskDistribution: Record<string, number>
+  duplicateFingerprintGroups: number
+  totalDuplicateSubmissions: number
+  dailyTrend: Array<{ date: string; count: number }>
 }
 
 export interface OptionStatistic {

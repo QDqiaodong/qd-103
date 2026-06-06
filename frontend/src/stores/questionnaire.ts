@@ -108,13 +108,19 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
   }
 
   // 提交问卷
-  async function submitQuestionnaire(id: string, answers: Array<{ questionId: string; value: string | string[] }>): Promise<boolean> {
+  async function submitQuestionnaire(
+    id: string,
+    answers: Array<{ questionId: string; value: string | string[] }>,
+    submitDurationSeconds?: number
+  ): Promise<boolean> {
     loading.value = true
     error.value = null
     try {
       const success = await api.submitQuestionnaire(id, {
         respondentId: api.getRespondentId(),
-        answers
+        answers,
+        submitDurationSeconds,
+        userAgent: navigator.userAgent
       })
       return success
     } catch (e) {

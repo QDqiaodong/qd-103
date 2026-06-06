@@ -15,6 +15,7 @@ const answers = ref<Record<string, string | string[]>>({})
 const submitting = ref(false)
 const submitted = ref(false)
 const errorMsg = ref('')
+const startTime = ref(Date.now())
 
 const questionnaireId = computed(() => route.params.id as string)
 
@@ -100,7 +101,9 @@ async function submitForm() {
       value
     }))
 
-    const success = await store.submitQuestionnaire(questionnaireId.value, answerList)
+    const submitDurationSeconds = Math.floor((Date.now() - startTime.value) / 1000)
+
+    const success = await store.submitQuestionnaire(questionnaireId.value, answerList, submitDurationSeconds)
     if (success) {
       submitted.value = true
     } else {

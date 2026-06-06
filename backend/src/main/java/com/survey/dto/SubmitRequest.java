@@ -7,6 +7,8 @@ import java.util.List;
 public class SubmitRequest {
     private String respondentId;
     private List<AnswerDTO> answers;
+    private Integer submitDurationSeconds;
+    private String userAgent;
 
     @Data
     public static class AnswerDTO {

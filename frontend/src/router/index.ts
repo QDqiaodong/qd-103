@@ -29,6 +29,11 @@ const router = createRouter({
       component: () => import('../views/StatisticsPage.vue')
     },
     {
+      path: '/fingerprint/:id',
+      name: 'fingerprint',
+      component: () => import('../views/FingerprintPage.vue')
+    },
+    {
       path: '/preview/:id',
       name: 'preview',
       component: () => import('../views/PreviewPage.vue')

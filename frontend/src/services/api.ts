@@ -3,7 +3,9 @@ import type {
   ApiResponse,
   Questionnaire,
   StatisticsResponse,
-  SubmitRequest
+  SubmitRequest,
+  Fingerprint,
+  FingerprintStatistics
 } from '../types'
 
 const BASE_URL = '/api'
@@ -83,6 +85,33 @@ export async function getStatistics(id: string): Promise<StatisticsResponse | nu
   const response = await api.get<ApiResponse<StatisticsResponse>>(`/questionnaires/${id}/statistics`)
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取统计数据失败'))
+  }
+  return response.data.data || null
+}
+
+// 获取指纹档案列表
+export async function getFingerprints(id: string): Promise<Fingerprint[]> {
+  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints`)
+  if (!isSuccess(response)) {
+    throw new Error(getErrorMessage(response, '获取指纹档案失败'))
+  }
+  return response.data.data || []
+}
+
+// 获取风险指纹列表
+export async function getRiskyFingerprints(id: string): Promise<Fingerprint[]> {
+  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints/risky`)
+  if (!isSuccess(response)) {
+    throw new Error(getErrorMessage(response, '获取风险指纹失败'))
+  }
+  return response.data.data || []
+}
+
+// 获取指纹统计数据
+export async function getFingerprintStatistics(id: string): Promise<FingerprintStatistics | null> {
+  const response = await api.get<ApiResponse<FingerprintStatistics>>(`/questionnaires/${id}/fingerprints/statistics`)
+  if (!isSuccess(response)) {
+    throw new Error(getErrorMessage(response, '获取指纹统计失败'))
   }
   return response.data.data || null
 }

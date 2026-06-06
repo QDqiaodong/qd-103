@@ -200,6 +200,10 @@ function exportData() {
 function goBack() {
   router.push('/')
 }
+
+function goToFingerprint() {
+  router.push(`/fingerprint/${questionnaireId.value}`)
+}
 </script>
 
 <template>
@@ -211,6 +215,9 @@ function goBack() {
           <div class="header-actions">
             <button class="btn btn-outline" @click="goBack">
               返回
+            </button>
+            <button class="btn btn-outline" @click="goToFingerprint">
+              指纹档案
             </button>
             <button class="btn btn-primary" @click="exportData">
               导出数据

@@ -22,6 +22,7 @@ public class QuestionnaireService {
     private final AnswerRepository answerRepository;
     private final RedisService redisService;
     private final ObjectMapper objectMapper;
+    private final FingerprintService fingerprintService;
 
     public List<QuestionnaireDTO> getAllQuestionnaires() {
         List<Questionnaire> questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
@@ -150,7 +151,7 @@ public class QuestionnaireService {
     }
 
     @Transactional
-    public boolean submitQuestionnaire(String id, SubmitRequest request) {
+    public boolean submitQuestionnaire(String id, SubmitRequest request, String ipAddress) {
         Questionnaire questionnaire = questionnaireRepository.findById(id).orElse(null);
         if (questionnaire == null || !"active".equals(questionnaire.getStatus())) {
             return false;
@@ -197,6 +198,18 @@ public class QuestionnaireService {
         }
 
         redisService.markSubmitted(id, request.getRespondentId());
+
+        try {
+            fingerprintService.createAndSaveFingerprint(
+                    id,
+                    response.getId(),
+                    request,
+                    ipAddress,
+                    request.getUserAgent(),
+                    request.getSubmitDurationSeconds()
+            );
+        } catch (Exception e) {
+        }
 
         return true;
     }

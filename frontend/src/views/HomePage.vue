@@ -87,6 +87,10 @@ function goToStatistics(id: string) {
   router.push(`/statistics/${id}`)
 }
 
+function goToFingerprint(id: string) {
+  router.push(`/fingerprint/${id}`)
+}
+
 function copyLink(id: string) {
   const link = `${window.location.origin}/fill/${id}`
   navigator.clipboard.writeText(link)
@@ -243,6 +247,12 @@ function getThemeColor(q: Questionnaire): string {
               @click="goToStatistics(q.id)"
             >
               统计
+            </button>
+            <button
+              class="btn btn-outline"
+              @click="goToFingerprint(q.id)"
+            >
+              指纹
             </button>
             <button
               class="btn btn-outline"
