@@ -7,6 +7,7 @@ import { DEFAULT_COVER_CONFIG } from '../types'
 import QuestionEditor from '../components/QuestionEditor.vue'
 import CoverEditor from '../components/CoverEditor.vue'
 import CoverPreview from '../components/CoverPreview.vue'
+import { isDeadlineRisk, getDeadlineRiskInfo } from '../lib/utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -169,6 +170,30 @@ function copyLink() {
       </div>
     </header>
 
+    <div
+      v-if="store.currentQuestionnaire && isDeadlineRisk(store.currentQuestionnaire)"
+      class="deadline-risk-banner"
+    >
+      <div class="container">
+        <div class="risk-banner-inner">
+          <div class="risk-banner-icon">⚠️</div>
+          <div class="risk-banner-content">
+            <div class="risk-banner-title">截止风险提醒</div>
+            <div class="risk-banner-message">{{ getDeadlineRiskInfo(store.currentQuestionnaire).message }}</div>
+            <div class="risk-banner-tips">{{ getDeadlineRiskInfo(store.currentQuestionnaire).tips }}</div>
+          </div>
+          <div class="risk-banner-actions">
+            <button class="btn btn-warning-light" @click="copyLink">
+              📋 复制链接推广
+            </button>
+            <button class="btn btn-warning" @click="goToStatistics">
+              查看数据
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main class="container">
       <div class="edit-layout">
         <aside class="settings-panel card">
@@ -306,6 +331,94 @@ function copyLink() {
   background: white;
   border-bottom: 1px solid var(--color-border);
   padding: 16px 0;
+}
+
+.deadline-risk-banner {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border-bottom: 1px solid #F59E0B;
+  padding: 16px 0;
+  animation: banner-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes banner-pulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15); }
+  50% { box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25); }
+}
+
+.risk-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.risk-banner-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.risk-banner-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.risk-banner-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #92400E;
+  margin-bottom: 4px;
+}
+
+.risk-banner-message {
+  font-size: 14px;
+  font-weight: 500;
+  color: #B45309;
+  margin-bottom: 2px;
+}
+
+.risk-banner-tips {
+  font-size: 12px;
+  color: #D97706;
+}
+
+.risk-banner-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-warning {
+  background: #F59E0B;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-warning:hover {
+  background: #D97706;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-warning-light {
+  background: white;
+  color: #B45309;
+  border: 1px solid #FCD34D;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-warning-light:hover {
+  background: #FFFBEB;
+  border-color: #F59E0B;
 }
 
 .header-content {
