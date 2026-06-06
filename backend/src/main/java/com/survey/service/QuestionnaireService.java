@@ -33,9 +33,11 @@ public class QuestionnaireService {
             if ("active".equals(q.getStatus())
                     && q.getDeadline() != null
                     && q.getDeadline().isBefore(now)) {
-                snapshotService.createSnapshot(q.getId(), "expired");
+                processExpiredQuestionnaire(q.getId());
             }
         }
+
+        questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
 
         return questionnaires.stream()
                 .map(this::toDTO)
@@ -48,17 +50,36 @@ public class QuestionnaireService {
             return null;
         }
 
-        checkAndCreateExpiredSnapshot(questionnaire);
+        if ("active".equals(questionnaire.getStatus())
+                && questionnaire.getDeadline() != null
+                && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
+            processExpiredQuestionnaire(id);
+            questionnaire = questionnaireRepository.findByIdWithQuestions(id);
+        }
 
         return toDTO(questionnaire);
     }
 
-    private void checkAndCreateExpiredSnapshot(Questionnaire questionnaire) {
-        if ("active".equals(questionnaire.getStatus())
-                && questionnaire.getDeadline() != null
-                && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
-            snapshotService.createSnapshot(questionnaire.getId(), "expired");
+    @Transactional
+    public void processExpiredQuestionnaire(String questionnaireId) {
+        Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(questionnaireId);
+        if (questionnaire == null) {
+            return;
         }
+
+        if (!"active".equals(questionnaire.getStatus())) {
+            return;
+        }
+
+        if (questionnaire.getDeadline() == null
+                || !questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
+            return;
+        }
+
+        questionnaire.setStatus("expired");
+        questionnaireRepository.save(questionnaire);
+
+        snapshotService.createSnapshot(questionnaireId, "expired");
     }
 
     @Transactional
