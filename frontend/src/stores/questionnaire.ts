@@ -32,7 +32,8 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
     loading.value = true
     error.value = null
     try {
-      currentQuestionnaire.value = await api.getQuestionnaire(id)
+      const viewerToken = api.getCreatorToken(id) || undefined
+      currentQuestionnaire.value = await api.getQuestionnaire(id, viewerToken)
     } catch (e) {
       error.value = '获取问卷详情失败'
       console.error(e)

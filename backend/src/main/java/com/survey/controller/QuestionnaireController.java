@@ -23,14 +23,17 @@ public class QuestionnaireController {
     private final FingerprintService fingerprintService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<QuestionnaireDTO>>> getAll() {
-        List<QuestionnaireDTO> questionnaires = questionnaireService.getAllQuestionnaires();
+    public ResponseEntity<ApiResponse<List<QuestionnaireDTO>>> getAll(
+            @RequestParam(required = false) String viewerToken) {
+        List<QuestionnaireDTO> questionnaires = questionnaireService.getAllQuestionnaires(viewerToken);
         return ResponseEntity.ok(ApiResponse.success(questionnaires));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<QuestionnaireDTO>> getById(@PathVariable String id) {
-        QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(id);
+    public ResponseEntity<ApiResponse<QuestionnaireDTO>> getById(
+            @PathVariable String id,
+            @RequestParam(required = false) String viewerToken) {
+        QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(id, viewerToken);
         if (questionnaire == null) {
             return ResponseEntity.ok(ApiResponse.error("问卷不存在"));
         }
@@ -74,7 +77,12 @@ public class QuestionnaireController {
     }
 
     @GetMapping("/{id}/fingerprints")
-    public ResponseEntity<ApiResponse<List<FingerprintDTO>>> getFingerprints(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<List<FingerprintDTO>>> getFingerprints(
+            @PathVariable String id,
+            @RequestParam(required = false) String viewerToken) {
+        if (!isResultsVisible(id, viewerToken)) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
         List<SubmitFingerprint> fingerprints = fingerprintService.getFingerprintsByQuestionnaireId(id);
         List<FingerprintDTO> dtos = fingerprints.stream()
                 .map(this::toFingerprintDTO)
@@ -83,7 +91,12 @@ public class QuestionnaireController {
     }
 
     @GetMapping("/{id}/fingerprints/risky")
-    public ResponseEntity<ApiResponse<List<FingerprintDTO>>> getRiskyFingerprints(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<List<FingerprintDTO>>> getRiskyFingerprints(
+            @PathVariable String id,
+            @RequestParam(required = false) String viewerToken) {
+        if (!isResultsVisible(id, viewerToken)) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
         List<SubmitFingerprint> fingerprints = fingerprintService.getRiskyFingerprints(id);
         List<FingerprintDTO> dtos = fingerprints.stream()
                 .map(this::toFingerprintDTO)
@@ -92,9 +105,30 @@ public class QuestionnaireController {
     }
 
     @GetMapping("/{id}/fingerprints/statistics")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getFingerprintStatistics(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getFingerprintStatistics(
+            @PathVariable String id,
+            @RequestParam(required = false) String viewerToken) {
+        if (!isResultsVisible(id, viewerToken)) {
+            Map<String, Object> emptyStats = Map.of(
+                    "totalFingerprints", 0,
+                    "distinctFingerprints", 0,
+                    "duplicateFingerprintGroups", 0,
+                    "totalDuplicateSubmissions", 0,
+                    "riskDistribution", Map.of("normal", 0, "suspicious", 0, "high_risk", 0),
+                    "dailyTrend", List.of()
+            );
+            return ResponseEntity.ok(ApiResponse.success(emptyStats));
+        }
         Map<String, Object> stats = fingerprintService.getFingerprintStatistics(id);
         return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    private boolean isResultsVisible(String questionnaireId, String viewerToken) {
+        QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(questionnaireId, viewerToken);
+        if (questionnaire == null) {
+            return false;
+        }
+        return questionnaire.getResponseCount() != null;
     }
 
     private String getClientIp(HttpServletRequest request) {

@@ -23,6 +23,14 @@ const activeTab = ref<'overview' | 'fingerprints' | 'risky' | 'clusters'>('overv
 const filterRiskLevel = ref<string>('all')
 const searchKeyword = ref('')
 
+const resultsVisible = computed(() => {
+  return questionnaire.value?.responseCount !== null && questionnaire.value?.responseCount !== undefined
+})
+
+const isCreator = computed(() => {
+  return api.isCreator(questionnaireId.value)
+})
+
 let riskChart: echarts.ECharts | null = null
 let trendChart: echarts.ECharts | null = null
 
@@ -61,14 +69,18 @@ onMounted(async () => {
 async function loadData() {
   loading.value = true
   try {
-    questionnaire.value = await api.getQuestionnaire(questionnaireId.value)
-    fingerprintStats.value = await api.getFingerprintStatistics(questionnaireId.value)
-    fingerprints.value = await api.getFingerprints(questionnaireId.value)
-    riskyFingerprints.value = await api.getRiskyFingerprints(questionnaireId.value)
+    const viewerToken = api.getCreatorToken(questionnaireId.value) || undefined
+    questionnaire.value = await api.getQuestionnaire(questionnaireId.value, viewerToken)
+
+    if (resultsVisible.value) {
+      fingerprintStats.value = await api.getFingerprintStatistics(questionnaireId.value, viewerToken)
+      fingerprints.value = await api.getFingerprints(questionnaireId.value, viewerToken)
+      riskyFingerprints.value = await api.getRiskyFingerprints(questionnaireId.value, viewerToken)
+    }
   } finally {
     loading.value = false
     await nextTick()
-    if (activeTab.value === 'overview') {
+    if (activeTab.value === 'overview' && resultsVisible.value) {
       renderCharts()
     }
   }
@@ -261,6 +273,10 @@ function goBack() {
 function goToStatistics() {
   router.push(`/statistics/${questionnaireId.value}`)
 }
+
+function goToEdit() {
+  router.push(`/edit/${questionnaireId.value}`)
+}
 </script>
 
 <template>
@@ -293,6 +309,25 @@ function goToStatistics() {
       <div v-if="loading" class="loading">
         加载中...
       </div>
+
+      <template v-else-if="!resultsVisible">
+        <div class="results-hidden card">
+          <div class="results-hidden-icon">🔍</div>
+          <h2 class="results-hidden-title">指纹档案暂未公开</h2>
+          <p class="results-hidden-desc">
+            该问卷的指纹档案数据暂不可见
+          </p>
+          <div v-if="!isCreator" class="results-hidden-tip">
+            💡 如需查看完整指纹数据，请联系问卷创建者
+          </div>
+          <div v-else class="results-hidden-tip">
+            👑 您是问卷创建者，可以在编辑页面调整结果公开策略
+          </div>
+          <button v-if="isCreator" class="btn btn-primary results-hidden-btn" @click="goToEdit">
+            前往编辑设置
+          </button>
+        </div>
+      </template>
 
       <template v-else>
         <div class="tabs-nav">
@@ -1399,6 +1434,45 @@ function goToStatistics() {
   color: #1E40AF;
 }
 
+.results-hidden {
+  text-align: center;
+  padding: 60px 40px;
+  margin: 24px 0;
+}
+
+.results-hidden-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.results-hidden-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+
+.results-hidden-desc {
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.results-hidden-tip {
+  font-size: 13px;
+  color: var(--color-primary);
+  background: #EFF6FF;
+  padding: 10px 16px;
+  border-radius: 8px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.results-hidden-btn {
+  padding: 10px 24px;
+}
+
 @media (max-width: 768px) {
   .stats-overview {
     grid-template-columns: repeat(2, 1fr);
@@ -1428,6 +1502,18 @@ function goToStatistics() {
     flex: none;
     font-size: 13px;
     padding: 10px 12px;
+  }
+
+  .results-hidden {
+    padding: 40px 20px;
+  }
+
+  .results-hidden-icon {
+    font-size: 48px;
+  }
+
+  .results-hidden-title {
+    font-size: 20px;
   }
 }
 </style>

@@ -101,9 +101,9 @@ const isCreator = computed(() => {
 async function loadData() {
   loading.value = true
   try {
-    questionnaire.value = await api.getQuestionnaire(questionnaireId.value)
-    const creatorToken = api.getCreatorToken(questionnaireId.value)
-    statistics.value = await api.getStatistics(questionnaireId.value, creatorToken || undefined)
+    const creatorToken = api.getCreatorToken(questionnaireId.value) || undefined
+    questionnaire.value = await api.getQuestionnaire(questionnaireId.value, creatorToken)
+    statistics.value = await api.getStatistics(questionnaireId.value, creatorToken)
     
     if (statistics.value && statistics.value.resultsVisible !== false) {
       wordCloudDataMap.value.clear()

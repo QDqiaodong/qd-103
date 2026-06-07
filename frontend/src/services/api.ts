@@ -38,8 +38,9 @@ export async function getQuestionnaires(): Promise<Questionnaire[]> {
 }
 
 // 获取问卷详情
-export async function getQuestionnaire(id: string): Promise<Questionnaire | null> {
-  const response = await api.get<ApiResponse<Questionnaire>>(`/questionnaires/${id}`)
+export async function getQuestionnaire(id: string, viewerToken?: string): Promise<Questionnaire | null> {
+  const params = viewerToken ? { viewerToken } : {}
+  const response = await api.get<ApiResponse<Questionnaire>>(`/questionnaires/${id}`, { params })
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取问卷详情失败'))
   }
@@ -121,8 +122,9 @@ export function isCreator(questionnaireId: string): boolean {
 }
 
 // 获取指纹档案列表
-export async function getFingerprints(id: string): Promise<Fingerprint[]> {
-  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints`)
+export async function getFingerprints(id: string, viewerToken?: string): Promise<Fingerprint[]> {
+  const params = viewerToken ? { viewerToken } : {}
+  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints`, { params })
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取指纹档案失败'))
   }
@@ -130,8 +132,9 @@ export async function getFingerprints(id: string): Promise<Fingerprint[]> {
 }
 
 // 获取风险指纹列表
-export async function getRiskyFingerprints(id: string): Promise<Fingerprint[]> {
-  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints/risky`)
+export async function getRiskyFingerprints(id: string, viewerToken?: string): Promise<Fingerprint[]> {
+  const params = viewerToken ? { viewerToken } : {}
+  const response = await api.get<ApiResponse<Fingerprint[]>>(`/questionnaires/${id}/fingerprints/risky`, { params })
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取风险指纹失败'))
   }
@@ -139,8 +142,9 @@ export async function getRiskyFingerprints(id: string): Promise<Fingerprint[]> {
 }
 
 // 获取指纹统计数据
-export async function getFingerprintStatistics(id: string): Promise<FingerprintStatistics | null> {
-  const response = await api.get<ApiResponse<FingerprintStatistics>>(`/questionnaires/${id}/fingerprints/statistics`)
+export async function getFingerprintStatistics(id: string, viewerToken?: string): Promise<FingerprintStatistics | null> {
+  const params = viewerToken ? { viewerToken } : {}
+  const response = await api.get<ApiResponse<FingerprintStatistics>>(`/questionnaires/${id}/fingerprints/statistics`, { params })
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取指纹统计失败'))
   }

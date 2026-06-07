@@ -5,18 +5,21 @@ import { useQuestionnaireStore } from '../stores/questionnaire'
 import type { Questionnaire, QuestionnaireStatus, CoverTheme, ResultVisibility } from '../types'
 import { COVER_THEMES, DEFAULT_COVER_CONFIG, RESULT_VISIBILITY_OPTIONS } from '../types'
 
-function getHeatLevel(q: Questionnaire): { level: number; label: string; color: string } {
-  const count = q.responseCount || 0
+function getHeatLevel(q: Questionnaire): { level: number; label: string; color: string; hidden: boolean } {
+  if (q.responseCount === null || q.responseCount === undefined) {
+    return { level: 0, label: '未公开', color: '#9CA3AF', hidden: true }
+  }
+  const count = q.responseCount
   const createdAt = new Date(q.createdAt).getTime()
   const now = Date.now()
   const daysActive = Math.max(1, (now - createdAt) / (1000 * 60 * 60 * 24))
   const avgPerDay = count / daysActive
 
-  if (avgPerDay >= 20) return { level: 5, label: '爆热', color: '#EF4444' }
-  if (avgPerDay >= 10) return { level: 4, label: '火热', color: '#F97316' }
-  if (avgPerDay >= 5) return { level: 3, label: '活跃', color: '#F59E0B' }
-  if (avgPerDay >= 2) return { level: 2, label: '平稳', color: '#10B981' }
-  return { level: 1, label: '冷清', color: '#9CA3AF' }
+  if (avgPerDay >= 20) return { level: 5, label: '爆热', color: '#EF4444', hidden: false }
+  if (avgPerDay >= 10) return { level: 4, label: '火热', color: '#F97316', hidden: false }
+  if (avgPerDay >= 5) return { level: 3, label: '活跃', color: '#F59E0B', hidden: false }
+  if (avgPerDay >= 2) return { level: 2, label: '平稳', color: '#10B981', hidden: false }
+  return { level: 1, label: '冷清', color: '#9CA3AF', hidden: false }
 }
 
 function getDeadlineInfo(q: Questionnaire): { daysLeft: number | null; urgency: 'critical' | 'warning' | 'normal' | 'none'; label: string } {
@@ -40,6 +43,9 @@ function getDeadlineInfo(q: Questionnaire): { daysLeft: number | null; urgency: 
 }
 
 function needsAttention(q: Questionnaire): boolean {
+  if (q.responseCount === null || q.responseCount === undefined) {
+    return false
+  }
   const deadlineInfo = getDeadlineInfo(q)
   const heat = getHeatLevel(q)
   return deadlineInfo.urgency === 'critical' && heat.level <= 2
@@ -220,7 +226,7 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
 
           <p class="card-description">{{ q.description || '暂无描述' }}</p>
 
-          <div class="heat-section">
+          <div class="heat-section" :class="{ 'heat-hidden': getHeatLevel(q).hidden }">
             <div class="heat-header">
               <span class="heat-label">回收热度</span>
               <span class="heat-value" :style="{ color: getHeatLevel(q).color }">
@@ -232,8 +238,8 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
                 v-for="i in 5"
                 :key="i"
                 class="heat-segment"
-                :class="{ active: i <= getHeatLevel(q).level }"
-                :style="{ background: i <= getHeatLevel(q).level ? getHeatLevel(q).color : undefined }"
+                :class="{ active: !getHeatLevel(q).hidden && i <= getHeatLevel(q).level }"
+                :style="{ background: !getHeatLevel(q).hidden && i <= getHeatLevel(q).level ? getHeatLevel(q).color : undefined }"
               ></div>
             </div>
           </div>
@@ -242,8 +248,13 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
             <span class="meta-item">
               {{ q.questions?.length || 0 }} 题
             </span>
-            <span class="meta-item">
-              {{ q.responseCount || 0 }} 人填写
+            <span class="meta-item" :class="{ 'count-hidden': q.responseCount === null || q.responseCount === undefined }">
+              <template v-if="q.responseCount !== null && q.responseCount !== undefined">
+                {{ q.responseCount }} 人填写
+              </template>
+              <template v-else>
+                <span class="count-hidden-text">—</span> 人填写
+              </template>
             </span>
             <span
               v-if="q.deadline"
@@ -561,5 +572,26 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
 .card-actions .btn {
   padding: 6px 12px;
   font-size: 13px;
+}
+
+.count-hidden {
+  color: #D1D5DB;
+}
+
+.count-hidden-text {
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.heat-hidden .heat-label {
+  color: #D1D5DB;
+}
+
+.heat-hidden .heat-value {
+  color: #9CA3AF !important;
+}
+
+.heat-hidden .heat-segment {
+  opacity: 0.3;
 }
 </style>

@@ -27,6 +27,10 @@ public class QuestionnaireService {
     private final SnapshotService snapshotService;
 
     public List<QuestionnaireDTO> getAllQuestionnaires() {
+        return getAllQuestionnaires(null);
+    }
+
+    public List<QuestionnaireDTO> getAllQuestionnaires(String viewerToken) {
         List<Questionnaire> questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
 
         LocalDateTime now = LocalDateTime.now();
@@ -40,12 +44,17 @@ public class QuestionnaireService {
 
         questionnaires = questionnaireRepository.findAllByOrderByCreatedAtDesc();
 
+        final String finalViewerToken = viewerToken;
         return questionnaires.stream()
-                .map(this::toDTO)
+                .map(q -> toDTO(q, false, finalViewerToken))
                 .collect(Collectors.toList());
     }
 
     public QuestionnaireDTO getQuestionnaire(String id) {
+        return getQuestionnaire(id, null);
+    }
+
+    public QuestionnaireDTO getQuestionnaire(String id, String viewerToken) {
         Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(id);
         if (questionnaire == null) {
             return null;
@@ -58,7 +67,7 @@ public class QuestionnaireService {
             questionnaire = questionnaireRepository.findByIdWithQuestions(id);
         }
 
-        return toDTO(questionnaire);
+        return toDTO(questionnaire, false, viewerToken);
     }
 
     @Transactional
@@ -124,7 +133,7 @@ public class QuestionnaireService {
             }
         }
 
-        return toDTO(questionnaire, true);
+        return toDTO(questionnaire, true, questionnaire.getCreatorToken());
     }
 
     @Transactional
@@ -235,7 +244,7 @@ public class QuestionnaireService {
             snapshotService.createSnapshot(id, "closed");
         }
 
-        return toDTO(questionnaire);
+        return toDTO(questionnaire, false, questionnaire.getCreatorToken());
     }
 
     @Transactional
@@ -488,10 +497,14 @@ public class QuestionnaireService {
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire) {
-        return toDTO(questionnaire, false);
+        return toDTO(questionnaire, false, null);
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken) {
+        return toDTO(questionnaire, includeCreatorToken, null);
+    }
+
+    private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken, String viewerToken) {
         QuestionnaireDTO dto = new QuestionnaireDTO();
         dto.setId(questionnaire.getId());
         dto.setTitle(questionnaire.getTitle());
@@ -504,8 +517,13 @@ public class QuestionnaireService {
         }
         dto.setCreatedAt(questionnaire.getCreatedAt());
 
-        Integer responseCount = questionnaireRepository.countResponsesByQuestionnaireId(questionnaire.getId());
-        dto.setResponseCount(responseCount != null ? responseCount : 0);
+        boolean resultsVisible = isStatisticsVisible(questionnaire, viewerToken);
+        if (resultsVisible) {
+            Integer responseCount = questionnaireRepository.countResponsesByQuestionnaireId(questionnaire.getId());
+            dto.setResponseCount(responseCount != null ? responseCount : 0);
+        } else {
+            dto.setResponseCount(null);
+        }
 
         List<QuestionDTO> questionDTOs = new ArrayList<>();
         for (Question question : questionnaire.getQuestions()) {
