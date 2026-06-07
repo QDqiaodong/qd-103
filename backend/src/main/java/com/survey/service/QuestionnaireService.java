@@ -91,6 +91,8 @@ public class QuestionnaireService {
         questionnaire.setDescription(dto.getDescription());
         questionnaire.setDeadline(dto.getDeadline());
         questionnaire.setStatus(dto.getStatus() != null ? dto.getStatus() : "active");
+        questionnaire.setResultVisibility(dto.getResultVisibility() != null ? dto.getResultVisibility() : "INSTANT_PUBLIC");
+        questionnaire.setCreatorToken("ct_" + UUID.randomUUID().toString().replace("-", ""));
         questionnaire.setCreatedAt(LocalDateTime.now());
         questionnaire.setCoverConfig(serializeCoverConfig(dto.getCoverConfig()));
 
@@ -122,7 +124,7 @@ public class QuestionnaireService {
             }
         }
 
-        return toDTO(questionnaire);
+        return toDTO(questionnaire, true);
     }
 
     @Transactional
@@ -139,6 +141,9 @@ public class QuestionnaireService {
         questionnaire.setDeadline(dto.getDeadline());
         if (dto.getStatus() != null) {
             questionnaire.setStatus(dto.getStatus());
+        }
+        if (dto.getResultVisibility() != null) {
+            questionnaire.setResultVisibility(dto.getResultVisibility());
         }
         if (dto.getCoverConfig() != null) {
             questionnaire.setCoverConfig(serializeCoverConfig(dto.getCoverConfig()));
@@ -322,16 +327,85 @@ public class QuestionnaireService {
         return SubmitResult.success();
     }
 
+    private boolean isStatisticsVisible(Questionnaire questionnaire, String viewerToken) {
+        if (viewerToken != null && viewerToken.equals(questionnaire.getCreatorToken())) {
+            return true;
+        }
+
+        String visibility = questionnaire.getResultVisibility();
+        if (visibility == null) {
+            visibility = "INSTANT_PUBLIC";
+        }
+
+        switch (visibility) {
+            case "INSTANT_PUBLIC":
+                return true;
+            case "AFTER_DEADLINE":
+                String status = questionnaire.getStatus();
+                if ("closed".equals(status) || "expired".equals(status)) {
+                    return true;
+                }
+                if (questionnaire.getDeadline() != null
+                        && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
+                    return true;
+                }
+                return false;
+            case "PRIVATE":
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    private String getVisibilityMessage(Questionnaire questionnaire, boolean isVisible) {
+        if (isVisible) {
+            return "结果可见";
+        }
+
+        String visibility = questionnaire.getResultVisibility();
+        if (visibility == null) {
+            visibility = "INSTANT_PUBLIC";
+        }
+
+        switch (visibility) {
+            case "AFTER_DEADLINE":
+                if (questionnaire.getDeadline() != null) {
+                    return "结果将在截止后公开";
+                }
+                return "结果将在问卷结束后公开";
+            case "PRIVATE":
+                return "结果仅创建者可见";
+            default:
+                return "结果可见";
+        }
+    }
+
     public StatisticsResponse getStatistics(String id) {
+        return getStatistics(id, null);
+    }
+
+    public StatisticsResponse getStatistics(String id, String viewerToken) {
         Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(id);
         if (questionnaire == null) {
             return null;
         }
 
+        boolean visible = isStatisticsVisible(questionnaire, viewerToken);
+
+        StatisticsResponse stats = new StatisticsResponse();
+        stats.setResultsVisible(visible);
+        stats.setResultVisibility(questionnaire.getResultVisibility());
+        stats.setVisibilityMessage(getVisibilityMessage(questionnaire, visible));
+
+        if (!visible) {
+            stats.setTotalResponses(0);
+            stats.setQuestions(new ArrayList<>());
+            return stats;
+        }
+
         List<SurveyResponse> responses = responseRepository.findByQuestionnaireId(id);
         List<Answer> allAnswers = answerRepository.findByQuestionnaireId(id);
 
-        StatisticsResponse stats = new StatisticsResponse();
         stats.setTotalResponses(responses.size());
 
         List<StatisticsResponse.QuestionStatistics> questionStats = new ArrayList<>();
@@ -414,12 +488,20 @@ public class QuestionnaireService {
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire) {
+        return toDTO(questionnaire, false);
+    }
+
+    private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken) {
         QuestionnaireDTO dto = new QuestionnaireDTO();
         dto.setId(questionnaire.getId());
         dto.setTitle(questionnaire.getTitle());
         dto.setDescription(questionnaire.getDescription());
         dto.setDeadline(questionnaire.getDeadline());
         dto.setStatus(questionnaire.getStatus());
+        dto.setResultVisibility(questionnaire.getResultVisibility());
+        if (includeCreatorToken) {
+            dto.setCreatorToken(questionnaire.getCreatorToken());
+        }
         dto.setCreatedAt(questionnaire.getCreatedAt());
 
         Integer responseCount = questionnaireRepository.countResponsesByQuestionnaireId(questionnaire.getId());

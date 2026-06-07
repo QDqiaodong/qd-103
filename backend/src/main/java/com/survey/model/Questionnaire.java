@@ -29,6 +29,12 @@ public class Questionnaire {
     @Column(nullable = false)
     private String status = "draft";
 
+    @Column(name = "result_visibility", nullable = false)
+    private String resultVisibility = "INSTANT_PUBLIC";
+
+    @Column(name = "creator_token")
+    private String creatorToken;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 

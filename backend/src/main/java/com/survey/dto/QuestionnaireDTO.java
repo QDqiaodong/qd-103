@@ -12,6 +12,8 @@ public class QuestionnaireDTO {
     private String description;
     private LocalDateTime deadline;
     private String status;
+    private String resultVisibility;
+    private String creatorToken;
     private LocalDateTime createdAt;
     private List<QuestionDTO> questions;
     private Integer responseCount;

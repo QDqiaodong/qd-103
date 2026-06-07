@@ -6,6 +6,9 @@ import java.util.Map;
 
 @Data
 public class StatisticsResponse {
+    private Boolean resultsVisible;
+    private String visibilityMessage;
+    private String resultVisibility;
     private Integer totalResponses;
     private List<QuestionStatistics> questions;
 

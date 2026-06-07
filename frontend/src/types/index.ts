@@ -4,6 +4,34 @@ export type QuestionType = 'single' | 'multiple' | 'text'
 
 export type QuestionnaireStatus = 'draft' | 'active' | 'closed' | 'expired'
 
+export type ResultVisibility = 'INSTANT_PUBLIC' | 'AFTER_DEADLINE' | 'PRIVATE'
+
+export const RESULT_VISIBILITY_OPTIONS: Array<{
+  value: ResultVisibility
+  label: string
+  description: string
+  icon: string
+}> = [
+  {
+    value: 'INSTANT_PUBLIC',
+    label: '即时公开',
+    description: '任何人随时可以查看统计结果',
+    icon: '🌐'
+  },
+  {
+    value: 'AFTER_DEADLINE',
+    label: '截止后公开',
+    description: '问卷截止后才能查看统计结果，避免投票中途被实时票数带偏',
+    icon: '⏰'
+  },
+  {
+    value: 'PRIVATE',
+    label: '仅自己可见',
+    description: '只有创建者本人才能查看统计结果',
+    icon: '🔒'
+  }
+]
+
 export interface QuestionOption {
   id: string
   content: string
@@ -26,6 +54,8 @@ export interface Questionnaire {
   description: string
   deadline?: string
   status: QuestionnaireStatus
+  resultVisibility: ResultVisibility
+  creatorToken?: string
   createdAt: string
   questions: Question[]
   responseCount?: number
@@ -89,6 +119,9 @@ export interface QuestionStatistic {
 }
 
 export interface StatisticsResponse {
+  resultsVisible?: boolean
+  visibilityMessage?: string
+  resultVisibility?: ResultVisibility
   totalResponses: number
   questions: QuestionStatistic[]
 }

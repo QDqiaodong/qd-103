@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Questionnaire, Question, QuestionType } from '../types'
+import type { Questionnaire, Question, QuestionType, ResultVisibility } from '../types'
 import * as api from '../services/api'
 
 function generateId(): string {
@@ -49,6 +49,9 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
       const result = await api.createQuestionnaire(data)
       if (result) {
         questionnaires.value.unshift(result)
+        if (result.creatorToken) {
+          api.saveCreatorToken(result.id, result.creatorToken)
+        }
       }
       return result
     } catch (e) {
@@ -139,6 +142,7 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
       title: '',
       description: '',
       status: 'draft',
+      resultVisibility: 'INSTANT_PUBLIC',
       createdAt: new Date().toISOString(),
       questions: []
     }

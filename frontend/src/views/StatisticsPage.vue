@@ -2,7 +2,8 @@
 import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '../services/api'
-import type { Questionnaire, StatisticsResponse, QuestionStatistic } from '../types'
+import type { Questionnaire, StatisticsResponse, QuestionStatistic, ResultVisibility } from '../types'
+import { RESULT_VISIBILITY_OPTIONS } from '../types'
 import * as echarts from 'echarts'
 import WordCloudView from '../components/WordCloudView.vue'
 import { analyzeWordCloud, type WordCloudData } from '../lib/wordCloud'
@@ -93,22 +94,31 @@ onMounted(async () => {
   await loadData()
 })
 
+const isCreator = computed(() => {
+  return api.isCreator(questionnaireId.value)
+})
+
 async function loadData() {
   loading.value = true
   try {
     questionnaire.value = await api.getQuestionnaire(questionnaireId.value)
-    statistics.value = await api.getStatistics(questionnaireId.value)
+    const creatorToken = api.getCreatorToken(questionnaireId.value)
+    statistics.value = await api.getStatistics(questionnaireId.value, creatorToken || undefined)
     
-    wordCloudDataMap.value.clear()
-    statistics.value.questions.forEach(q => {
-      if (q.type === 'text' && q.textAnswers) {
-        const wordCloudData = analyzeWordCloud(q.textAnswers)
-        wordCloudDataMap.value.set(q.questionId, wordCloudData)
-      }
-    })
+    if (statistics.value && statistics.value.resultsVisible !== false) {
+      wordCloudDataMap.value.clear()
+      statistics.value.questions.forEach(q => {
+        if (q.type === 'text' && q.textAnswers) {
+          const wordCloudData = analyzeWordCloud(q.textAnswers)
+          wordCloudDataMap.value.set(q.questionId, wordCloudData)
+        }
+      })
+    }
     
     await nextTick()
-    renderCharts()
+    if (statistics.value && statistics.value.resultsVisible !== false) {
+      renderCharts()
+    }
   } finally {
     loading.value = false
   }
@@ -204,6 +214,15 @@ function goBack() {
 function goToFingerprint() {
   router.push(`/fingerprint/${questionnaireId.value}`)
 }
+
+function getVisibilityLabel(visibility?: ResultVisibility): string {
+  const opt = RESULT_VISIBILITY_OPTIONS.find(o => o.value === visibility)
+  return opt ? opt.label : '即时公开'
+}
+
+function goToEdit() {
+  router.push(`/edit/${questionnaireId.value}`)
+}
 </script>
 
 <template>
@@ -235,7 +254,7 @@ function goToFingerprint() {
       <template v-else-if="questionnaire && statistics">
         <div class="stats-overview">
           <div class="stat-card card">
-            <div class="stat-value">{{ statistics.totalResponses }}</div>
+            <div class="stat-value">{{ statistics.resultsVisible === false ? '-' : statistics.totalResponses }}</div>
             <div class="stat-label">总填写人数</div>
           </div>
           <div class="stat-card card">
@@ -243,8 +262,17 @@ function goToFingerprint() {
             <div class="stat-label">题目数量</div>
           </div>
           <div class="stat-card card">
-            <div class="stat-value">{{ questionnaire.status }}</div>
-            <div class="stat-label">问卷状态</div>
+            <div class="stat-value status-value">
+              <span
+                :class="[
+                  'visibility-badge',
+                  `visibility-${statistics.resultVisibility || 'INSTANT_PUBLIC'}`
+                ]"
+              >
+                {{ getVisibilityLabel(statistics.resultVisibility) }}
+              </span>
+            </div>
+            <div class="stat-label">结果公开策略</div>
           </div>
         </div>
 
@@ -253,7 +281,24 @@ function goToFingerprint() {
           <p v-if="questionnaire.description" class="info-desc">{{ questionnaire.description }}</p>
         </div>
 
-        <div class="charts-section">
+        <div v-if="statistics.resultsVisible === false" class="results-hidden card">
+          <div class="results-hidden-icon">🔒</div>
+          <h2 class="results-hidden-title">结果暂未公开</h2>
+          <p class="results-hidden-desc">
+            {{ statistics.visibilityMessage || '该问卷结果暂不可见' }}
+          </p>
+          <div v-if="!isCreator" class="results-hidden-tip">
+            💡 如需查看完整统计数据，请联系问卷创建者
+          </div>
+          <div v-else class="results-hidden-tip">
+            👑 您是问卷创建者，可以在编辑页面调整结果公开策略
+          </div>
+          <button v-if="isCreator" class="btn btn-primary results-hidden-btn" @click="goToEdit">
+            前往编辑设置
+          </button>
+        </div>
+
+        <div v-else class="charts-section">
           <h2 class="section-title">答题统计</h2>
 
           <div
@@ -762,6 +807,74 @@ function goToFingerprint() {
   text-align: right;
 }
 
+.status-value {
+  font-size: 14px;
+  padding: 20px 0 8px;
+}
+
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.visibility-INSTANT_PUBLIC {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+.visibility-AFTER_DEADLINE {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+.visibility-PRIVATE {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.results-hidden {
+  text-align: center;
+  padding: 60px 40px;
+  margin: 24px 0;
+}
+
+.results-hidden-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.results-hidden-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+
+.results-hidden-desc {
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.results-hidden-tip {
+  font-size: 13px;
+  color: var(--color-primary);
+  background: #EFF6FF;
+  padding: 10px 16px;
+  border-radius: 8px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.results-hidden-btn {
+  padding: 10px 24px;
+}
+
 @media (max-width: 768px) {
   .stats-overview {
     grid-template-columns: 1fr;
@@ -774,6 +887,18 @@ function goToFingerprint() {
 
   .breakdown-bar {
     order: 3;
+  }
+
+  .results-hidden {
+    padding: 40px 20px;
+  }
+
+  .results-hidden-icon {
+    font-size: 48px;
+  }
+
+  .results-hidden-title {
+    font-size: 20px;
   }
 }
 </style>

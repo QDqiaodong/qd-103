@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
-import type { Questionnaire, QuestionnaireStatus, CoverTheme } from '../types'
-import { COVER_THEMES, DEFAULT_COVER_CONFIG } from '../types'
+import type { Questionnaire, QuestionnaireStatus, CoverTheme, ResultVisibility } from '../types'
+import { COVER_THEMES, DEFAULT_COVER_CONFIG, RESULT_VISIBILITY_OPTIONS } from '../types'
 
 function getHeatLevel(q: Questionnaire): { level: number; label: string; color: string } {
   const count = q.responseCount || 0
@@ -119,6 +119,21 @@ function getThemeColor(q: Questionnaire): string {
   const theme = q.coverConfig?.theme || DEFAULT_COVER_CONFIG.theme
   return COVER_THEMES[theme as CoverTheme]?.accentColor || '#4F46E5'
 }
+
+function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; color: string } {
+  const visibility = q.resultVisibility || 'INSTANT_PUBLIC'
+  const opt = RESULT_VISIBILITY_OPTIONS.find(o => o.value === visibility)
+  const colorMap: Record<ResultVisibility, string> = {
+    'INSTANT_PUBLIC': '#059669',
+    'AFTER_DEADLINE': '#D97706',
+    'PRIVATE': '#DC2626'
+  }
+  return {
+    label: opt?.label || '即时公开',
+    icon: opt?.icon || '🌐',
+    color: colorMap[visibility] || '#059669'
+  }
+}
 </script>
 
 <template>
@@ -188,6 +203,14 @@ function getThemeColor(q: Questionnaire): string {
             <div class="card-badges">
               <span class="theme-badge" :style="{ background: getThemeColor(q) + '15', color: getThemeColor(q) }">
                 {{ getThemeLabel(q) }}
+              </span>
+              <span
+                class="visibility-badge"
+                :style="{ background: getVisibilityInfo(q).color + '15', color: getVisibilityInfo(q).color }"
+                :title="getVisibilityInfo(q).label"
+              >
+                <span class="visibility-icon">{{ getVisibilityInfo(q).icon }}</span>
+                {{ getVisibilityInfo(q).label }}
               </span>
               <span :class="['badge', getStatusBadge(q.status).class]">
                 {{ getStatusBadge(q.status).text }}
@@ -399,6 +422,21 @@ function getThemeColor(q: Questionnaire): string {
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.visibility-badge .visibility-icon {
+  font-size: 12px;
 }
 
 .card-title {

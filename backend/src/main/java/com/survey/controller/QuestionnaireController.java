@@ -134,8 +134,10 @@ public class QuestionnaireController {
     }
 
     @GetMapping("/{id}/statistics")
-    public ResponseEntity<ApiResponse<StatisticsResponse>> getStatistics(@PathVariable String id) {
-        StatisticsResponse statistics = questionnaireService.getStatistics(id);
+    public ResponseEntity<ApiResponse<StatisticsResponse>> getStatistics(
+            @PathVariable String id,
+            @RequestParam(required = false) String viewerToken) {
+        StatisticsResponse statistics = questionnaireService.getStatistics(id, viewerToken);
         if (statistics == null) {
             return ResponseEntity.ok(ApiResponse.error("问卷不存在"));
         }

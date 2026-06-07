@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
-import type { QuestionType, QuestionnaireStatus, Question, QuestionOption, CoverConfig, Snapshot } from '../types'
-import { DEFAULT_COVER_CONFIG } from '../types'
+import type { QuestionType, QuestionnaireStatus, Question, QuestionOption, CoverConfig, Snapshot, ResultVisibility } from '../types'
+import { DEFAULT_COVER_CONFIG, RESULT_VISIBILITY_OPTIONS } from '../types'
 import QuestionEditor from '../components/QuestionEditor.vue'
 import CoverEditor from '../components/CoverEditor.vue'
 import CoverPreview from '../components/CoverPreview.vue'
@@ -17,6 +17,7 @@ const title = ref('')
 const description = ref('')
 const deadline = ref('')
 const status = ref<QuestionnaireStatus>('active')
+const resultVisibility = ref<ResultVisibility>('INSTANT_PUBLIC')
 const questions = ref<(Question & { options?: QuestionOption[] })[]>([])
 const saving = ref(false)
 const activeTab = ref<'questions' | 'cover' | 'snapshots'>('questions')
@@ -40,6 +41,7 @@ onMounted(async () => {
     description.value = store.currentQuestionnaire.description
     deadline.value = store.currentQuestionnaire.deadline ? store.currentQuestionnaire.deadline.slice(0, 16) : ''
     status.value = store.currentQuestionnaire.status
+    resultVisibility.value = store.currentQuestionnaire.resultVisibility || 'INSTANT_PUBLIC'
     questions.value = JSON.parse(JSON.stringify(store.currentQuestionnaire.questions))
     if (store.currentQuestionnaire.coverConfig) {
       coverConfig.value = { ...DEFAULT_COVER_CONFIG, ...store.currentQuestionnaire.coverConfig }
@@ -187,6 +189,7 @@ async function saveQuestionnaire() {
       description: description.value,
       deadline: deadline.value || undefined,
       status: status.value,
+      resultVisibility: resultVisibility.value,
       questions: questions.value,
       coverConfig: coverConfig.value
     }
@@ -289,6 +292,24 @@ function copyLink() {
               <option value="active">收集中</option>
               <option value="closed">已关闭</option>
             </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">结果公开策略</label>
+            <div class="visibility-options">
+              <div
+                v-for="opt in RESULT_VISIBILITY_OPTIONS"
+                :key="opt.value"
+                :class="['visibility-option', { active: resultVisibility === opt.value }]"
+                @click="resultVisibility = opt.value"
+              >
+                <div class="visibility-option-header">
+                  <span class="visibility-icon">{{ opt.icon }}</span>
+                  <span class="visibility-label">{{ opt.label }}</span>
+                </div>
+                <p class="visibility-desc">{{ opt.description }}</p>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -753,6 +774,55 @@ function copyLink() {
   font-weight: 500;
   padding-top: 12px;
   border-top: 1px dashed var(--color-border);
+}
+
+.visibility-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visibility-option {
+  padding: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+}
+
+.visibility-option:hover {
+  border-color: var(--color-primary);
+  background: #F8FAFC;
+}
+
+.visibility-option.active {
+  border-color: var(--color-primary);
+  background: #EFF6FF;
+}
+
+.visibility-option-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.visibility-icon {
+  font-size: 18px;
+}
+
+.visibility-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.visibility-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
 }
 
 @media (max-width: 768px) {
