@@ -141,4 +141,16 @@ public class QuestionnaireController {
         }
         return ResponseEntity.ok(ApiResponse.success(statistics));
     }
+
+    @PostMapping("/inspect")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> inspectAndCorrect() {
+        QuestionnaireService.StatusCorrectionResult result = questionnaireService.correctQuestionnaireStatuses();
+        Map<String, Object> data = Map.of(
+                "inspectTime", result.getInspectTime(),
+                "expiredCount", result.getExpiredCount(),
+                "reactivatedCount", result.getReactivatedCount(),
+                "totalCorrected", result.getTotalCorrected()
+        );
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
 }

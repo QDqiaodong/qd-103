@@ -438,6 +438,64 @@ public class QuestionnaireService {
         return dto;
     }
 
+    @Transactional
+    public StatusCorrectionResult correctQuestionnaireStatuses() {
+        LocalDateTime now = LocalDateTime.now();
+        StatusCorrectionResult result = new StatusCorrectionResult();
+
+        List<Questionnaire> activeExpired = questionnaireRepository.findActiveAndExpired(now);
+        for (Questionnaire q : activeExpired) {
+            q.setStatus("expired");
+            questionnaireRepository.save(q);
+            snapshotService.createSnapshot(q.getId(), "expired");
+            result.addExpiredCount();
+        }
+
+        List<Questionnaire> expiredReactivated = questionnaireRepository.findExpiredButDeadlineNotReached(now);
+        for (Questionnaire q : expiredReactivated) {
+            q.setStatus("active");
+            questionnaireRepository.save(q);
+            result.addReactivatedCount();
+        }
+
+        result.setInspectTime(now);
+        return result;
+    }
+
+    public static class StatusCorrectionResult {
+        private LocalDateTime inspectTime;
+        private int expiredCount;
+        private int reactivatedCount;
+
+        public LocalDateTime getInspectTime() {
+            return inspectTime;
+        }
+
+        public void setInspectTime(LocalDateTime inspectTime) {
+            this.inspectTime = inspectTime;
+        }
+
+        public int getExpiredCount() {
+            return expiredCount;
+        }
+
+        public void addExpiredCount() {
+            this.expiredCount++;
+        }
+
+        public int getReactivatedCount() {
+            return reactivatedCount;
+        }
+
+        public void addReactivatedCount() {
+            this.reactivatedCount++;
+        }
+
+        public int getTotalCorrected() {
+            return expiredCount + reactivatedCount;
+        }
+    }
+
     private String serializeCoverConfig(Map<String, Object> coverConfig) {
         if (coverConfig == null) return null;
         try {
