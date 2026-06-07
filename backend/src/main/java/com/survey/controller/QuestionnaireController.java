@@ -66,9 +66,9 @@ public class QuestionnaireController {
                                                         @RequestBody SubmitRequest request,
                                                         HttpServletRequest httpRequest) {
         String ipAddress = getClientIp(httpRequest);
-        boolean success = questionnaireService.submitQuestionnaire(id, request, ipAddress);
-        if (!success) {
-            return ResponseEntity.ok(ApiResponse.error("提交失败，您可能已经提交过"));
+        SubmitResult result = questionnaireService.submitQuestionnaire(id, request, ipAddress);
+        if (!result.isSuccess()) {
+            return ResponseEntity.ok(ApiResponse.error(result.getErrorMessage()));
         }
         return ResponseEntity.ok(ApiResponse.success(true));
     }

@@ -21,6 +21,7 @@ public class QuestionnaireService {
     private final SurveyResponseRepository responseRepository;
     private final AnswerRepository answerRepository;
     private final RedisService redisService;
+    private final RateLimitService rateLimitService;
     private final ObjectMapper objectMapper;
     private final FingerprintService fingerprintService;
     private final SnapshotService snapshotService;
@@ -246,23 +247,31 @@ public class QuestionnaireService {
     }
 
     @Transactional
-    public boolean submitQuestionnaire(String id, SubmitRequest request, String ipAddress) {
+    public SubmitResult submitQuestionnaire(String id, SubmitRequest request, String ipAddress) {
         Questionnaire questionnaire = questionnaireRepository.findById(id).orElse(null);
-        if (questionnaire == null || !"active".equals(questionnaire.getStatus())) {
-            return false;
+        if (questionnaire == null) {
+            return SubmitResult.fail(SubmitResult.ERROR_NOT_FOUND, "问卷不存在");
+        }
+
+        if (!"active".equals(questionnaire.getStatus())) {
+            return SubmitResult.fail(SubmitResult.ERROR_NOT_ACTIVE, "问卷未激活");
         }
 
         if (questionnaire.getDeadline() != null && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
-            return false;
+            return SubmitResult.fail(SubmitResult.ERROR_EXPIRED, "问卷已截止");
+        }
+
+        if (!rateLimitService.tryAcquire(questionnaire, ipAddress)) {
+            return SubmitResult.fail(SubmitResult.ERROR_RATE_LIMITED, "当前提交人数较多，请稍后再试");
         }
 
         if (redisService.isSubmitted(id, request.getRespondentId())) {
-            return false;
+            return SubmitResult.fail(SubmitResult.ERROR_ALREADY_SUBMITTED, "您已经提交过");
         }
 
         if (responseRepository.existsByQuestionnaireIdAndRespondentId(id, request.getRespondentId())) {
             redisService.markSubmitted(id, request.getRespondentId());
-            return false;
+            return SubmitResult.fail(SubmitResult.ERROR_ALREADY_SUBMITTED, "您已经提交过");
         }
 
         SurveyResponse response = new SurveyResponse();
@@ -306,7 +315,7 @@ public class QuestionnaireService {
         } catch (Exception e) {
         }
 
-        return true;
+        return SubmitResult.success();
     }
 
     public StatisticsResponse getStatistics(String id) {
