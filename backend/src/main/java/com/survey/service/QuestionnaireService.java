@@ -442,6 +442,10 @@ public class QuestionnaireService {
                     }
                 }
                 statistics.put("text_responses", textAnswers.size());
+
+                List<StatisticsResponse.QuestionStatistics.DedupedTextAnswer> deduped = dedupeTextAnswers(textAnswers);
+                qs.setDedupedTextAnswers(deduped);
+                qs.setDistinctTextAnswerCount(deduped.size());
             } else {
                 Map<String, String> optionIdToContent = new HashMap<>();
                 Set<String> optionIds = new HashSet<>();
@@ -494,6 +498,52 @@ public class QuestionnaireService {
             return value;
         }
         return null;
+    }
+
+    private List<StatisticsResponse.QuestionStatistics.DedupedTextAnswer> dedupeTextAnswers(List<String> textAnswers) {
+        if (textAnswers == null || textAnswers.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Map<String, Integer> countMap = new LinkedHashMap<>();
+        Map<String, Integer> firstOccurrenceMap = new LinkedHashMap<>();
+        int total = textAnswers.size();
+        int orderIndex = 0;
+
+        for (String answer : textAnswers) {
+            String normalized = normalizeWhitespace(answer);
+            countMap.merge(normalized, 1, Integer::sum);
+            if (!firstOccurrenceMap.containsKey(normalized)) {
+                firstOccurrenceMap.put(normalized, orderIndex++);
+            }
+        }
+
+        List<Map.Entry<String, Integer>> sortedEntries = new ArrayList<>(countMap.entrySet());
+        sortedEntries.sort((a, b) -> {
+            int countCompare = Integer.compare(b.getValue(), a.getValue());
+            if (countCompare != 0) {
+                return countCompare;
+            }
+            return Integer.compare(firstOccurrenceMap.get(a.getKey()), firstOccurrenceMap.get(b.getKey()));
+        });
+
+        List<StatisticsResponse.QuestionStatistics.DedupedTextAnswer> result = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : sortedEntries) {
+            StatisticsResponse.QuestionStatistics.DedupedTextAnswer item = new StatisticsResponse.QuestionStatistics.DedupedTextAnswer();
+            item.setContent(entry.getKey());
+            item.setCount(entry.getValue());
+            item.setPercentage(total > 0 ? (entry.getValue() * 100.0 / total) : 0.0);
+            result.add(item);
+        }
+
+        return result;
+    }
+
+    private String normalizeWhitespace(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.trim().replaceAll("\\s+", " ");
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire) {

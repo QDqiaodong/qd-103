@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '../services/api'
-import type { Questionnaire, StatisticsResponse, QuestionStatistic, ResultVisibility } from '../types'
+import type { Questionnaire, StatisticsResponse, QuestionStatistic, ResultVisibility, DedupedTextAnswer } from '../types'
 import { RESULT_VISIBILITY_OPTIONS } from '../types'
 import * as echarts from 'echarts'
 import WordCloudView from '../components/WordCloudView.vue'
@@ -18,9 +18,10 @@ const wordCloudDataMap = ref<Map<string, WordCloudData>>(new Map())
 
 const textBrowserState = reactive<Map<string, {
   expanded: boolean
-  sortBy: 'default' | 'latest' | 'longest'
+  sortBy: 'default' | 'latest' | 'longest' | 'count'
   keyword: string
   visibleCount: number
+  viewMode: 'original' | 'deduped'
 }>>(new Map())
 
 function getTextState(questionId: string) {
@@ -29,7 +30,8 @@ function getTextState(questionId: string) {
       expanded: false,
       sortBy: 'default',
       keyword: '',
-      visibleCount: 5
+      visibleCount: 5,
+      viewMode: 'deduped'
     })
   }
   return textBrowserState.get(questionId)!
@@ -67,9 +69,44 @@ function toggleExpand(questionId: string) {
   state.expanded = !state.expanded
 }
 
-function setSortBy(questionId: string, sortBy: 'default' | 'latest' | 'longest') {
+function setSortBy(questionId: string, sortBy: 'default' | 'latest' | 'longest' | 'count') {
   const state = getTextState(questionId)
   state.sortBy = sortBy
+}
+
+function setViewMode(questionId: string, viewMode: 'original' | 'deduped') {
+  const state = getTextState(questionId)
+  state.viewMode = viewMode
+  if (viewMode === 'deduped' && state.sortBy === 'default') {
+    state.sortBy = 'count'
+  }
+}
+
+function getSortedDedupedAnswers(questionId: string, dedupedAnswers: DedupedTextAnswer[]): DedupedTextAnswer[] {
+  const state = getTextState(questionId)
+  let answers = [...dedupedAnswers]
+
+  if (state.sortBy === 'longest') {
+    answers.sort((a, b) => b.content.length - a.content.length)
+  } else if (state.sortBy === 'count') {
+    answers.sort((a, b) => b.count - a.count)
+  }
+
+  if (state.keyword.trim()) {
+    const keyword = state.keyword.toLowerCase().trim()
+    answers = answers.filter(a => a.content.toLowerCase().includes(keyword))
+  }
+
+  return answers
+}
+
+function getVisibleDedupedAnswers(questionId: string, dedupedAnswers: DedupedTextAnswer[]): DedupedTextAnswer[] {
+  const state = getTextState(questionId)
+  const sorted = getSortedDedupedAnswers(questionId, dedupedAnswers)
+  if (state.expanded) {
+    return sorted
+  }
+  return sorted.slice(0, state.visibleCount)
 }
 
 function highlightKeyword(text: string, keyword: string): string {
@@ -181,6 +218,15 @@ function exportData() {
     const total = Object.values(q.statistics).reduce((a, b) => a + b, 0)
     if (q.type === 'text') {
       lines.push(`${q.content}\t填空\t-\t${total}\t-`)
+      if (q.dedupedTextAnswers && q.dedupedTextAnswers.length > 0) {
+        lines.push(`\t去重统计\t共 ${q.distinctTextAnswerCount} 种不重复回答\t-\t-`)
+        q.dedupedTextAnswers.forEach((item, aIndex) => {
+          const escapedAnswer = item.content.replace(/\t/g, ' ').replace(/\n/g, ' ')
+          lines.push(`\t\t${escapedAnswer}\t${item.count}\t${item.percentage.toFixed(1)}%`)
+        })
+        lines.push('')
+        lines.push(`\t原始列表\t共 ${q.textAnswers?.length || 0} 条原始回答\t-\t-`)
+      }
       if (q.textAnswers && q.textAnswers.length > 0) {
         q.textAnswers.forEach((answer, aIndex) => {
           const escapedAnswer = answer.replace(/\t/g, ' ').replace(/\n/g, ' ')
@@ -336,7 +382,12 @@ function goToEdit() {
                   <div class="browser-title">
                     <span class="browser-icon">📝</span>
                     文本回答浏览
-                    <span class="answer-count-badge">共 {{ q.totalResponses }} 条</span>
+                    <span class="answer-count-badge">
+                      共 {{ q.totalResponses }} 条
+                      <span v-if="q.dedupedTextAnswers && q.distinctTextAnswerCount != null" class="deduped-badge">
+                        去重后 {{ q.distinctTextAnswerCount }} 种
+                      </span>
+                    </span>
                   </div>
                   <button
                     class="btn-collapse"
@@ -348,20 +399,45 @@ function goToEdit() {
                 </div>
 
                 <div class="browser-toolbar">
+                  <div class="view-mode-group">
+                    <span class="toolbar-label">视图：</span>
+                    <button
+                      :class="['mode-btn', { active: getTextState(q.questionId).viewMode === 'deduped' }]"
+                      @click="setViewMode(q.questionId, 'deduped')"
+                    >
+                      去重聚合
+                    </button>
+                    <button
+                      :class="['mode-btn', { active: getTextState(q.questionId).viewMode === 'original' }]"
+                      @click="setViewMode(q.questionId, 'original')"
+                    >
+                      原始列表
+                    </button>
+                  </div>
                   <div class="sort-group">
                     <span class="toolbar-label">排序：</span>
-                    <button
-                      :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'default' }]"
-                      @click="setSortBy(q.questionId, 'default')"
-                    >
-                      默认
-                    </button>
-                    <button
-                      :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'latest' }]"
-                      @click="setSortBy(q.questionId, 'latest')"
-                    >
-                      最新
-                    </button>
+                    <template v-if="getTextState(q.questionId).viewMode === 'original'">
+                      <button
+                        :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'default' }]"
+                        @click="setSortBy(q.questionId, 'default')"
+                      >
+                        默认
+                      </button>
+                      <button
+                        :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'latest' }]"
+                        @click="setSortBy(q.questionId, 'latest')"
+                      >
+                        最新
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button
+                        :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'count' }]"
+                        @click="setSortBy(q.questionId, 'count')"
+                      >
+                        按数量
+                      </button>
+                    </template>
                     <button
                       :class="['sort-btn', { active: getTextState(q.questionId).sortBy === 'longest' }]"
                       @click="setSortBy(q.questionId, 'longest')"
@@ -376,35 +452,74 @@ function goToEdit() {
                       class="search-input"
                       placeholder="搜索关键词..."
                     />
-                    <span v-if="getTextState(q.questionId).keyword && q.textAnswers" class="search-result-count">
-                      {{ getSortedAnswers(q.questionId, q.textAnswers).length }} 条匹配
+                    <span
+                      v-if="getTextState(q.questionId).keyword"
+                      class="search-result-count"
+                    >
+                      <template v-if="getTextState(q.questionId).viewMode === 'original' && q.textAnswers">
+                        {{ getSortedAnswers(q.questionId, q.textAnswers).length }} 条匹配
+                      </template>
+                      <template v-else-if="getTextState(q.questionId).viewMode === 'deduped' && q.dedupedTextAnswers">
+                        {{ getSortedDedupedAnswers(q.questionId, q.dedupedTextAnswers).length }} 种匹配
+                      </template>
                     </span>
                   </div>
                 </div>
 
-                <div v-if="q.textAnswers && q.textAnswers.length > 0" class="text-answer-list">
-                  <div
-                    v-for="(answer, index) in getVisibleAnswers(q.questionId, q.textAnswers)"
-                    :key="index"
-                    class="text-answer-item"
-                  >
-                    <span class="answer-number">{{ getSortedAnswers(q.questionId, q.textAnswers!).indexOf(answer) + 1 }}.</span>
-                    <span
-                      class="answer-content"
-                      v-html="highlightKeyword(answer, getTextState(q.questionId).keyword)"
-                    ></span>
-                    <span class="answer-length">{{ answer.length }}字</span>
-                  </div>
+                <template v-if="getTextState(q.questionId).viewMode === 'original'">
+                  <div v-if="q.textAnswers && q.textAnswers.length > 0" class="text-answer-list">
+                    <div
+                      v-for="(answer, index) in getVisibleAnswers(q.questionId, q.textAnswers)"
+                      :key="index"
+                      class="text-answer-item"
+                    >
+                      <span class="answer-number">{{ getSortedAnswers(q.questionId, q.textAnswers!).indexOf(answer) + 1 }}.</span>
+                      <span
+                        class="answer-content"
+                        v-html="highlightKeyword(answer, getTextState(q.questionId).keyword)"
+                      ></span>
+                      <span class="answer-length">{{ answer.length }}字</span>
+                    </div>
 
-                  <div
-                    v-if="!getTextState(q.questionId).expanded && getSortedAnswers(q.questionId, q.textAnswers).length > getTextState(q.questionId).visibleCount"
-                    class="expand-hint"
-                    @click="toggleExpand(q.questionId)"
-                  >
-                    还有 {{ getSortedAnswers(q.questionId, q.textAnswers).length - getTextState(q.questionId).visibleCount }} 条回答，点击展开查看全部
+                    <div
+                      v-if="!getTextState(q.questionId).expanded && getSortedAnswers(q.questionId, q.textAnswers).length > getTextState(q.questionId).visibleCount"
+                      class="expand-hint"
+                      @click="toggleExpand(q.questionId)"
+                    >
+                      还有 {{ getSortedAnswers(q.questionId, q.textAnswers).length - getTextState(q.questionId).visibleCount }} 条回答，点击展开查看全部
+                    </div>
                   </div>
-                </div>
-                <p v-else class="text-empty">暂无回答内容</p>
+                  <p v-else class="text-empty">暂无回答内容</p>
+                </template>
+
+                <template v-else>
+                  <div v-if="q.dedupedTextAnswers && q.dedupedTextAnswers.length > 0" class="text-answer-list">
+                    <div
+                      v-for="(item, index) in getVisibleDedupedAnswers(q.questionId, q.dedupedTextAnswers)"
+                      :key="index"
+                      class="text-answer-item deduped-item"
+                    >
+                      <span class="answer-number">{{ getSortedDedupedAnswers(q.questionId, q.dedupedTextAnswers!).findIndex(a => a.content === item.content) + 1 }}.</span>
+                      <span
+                        class="answer-content"
+                        v-html="highlightKeyword(item.content, getTextState(q.questionId).keyword)"
+                      ></span>
+                      <span class="answer-meta">
+                        <span class="answer-count-tag">{{ item.count }} 次</span>
+                        <span class="answer-percent">{{ item.percentage.toFixed(1) }}%</span>
+                      </span>
+                    </div>
+
+                    <div
+                      v-if="!getTextState(q.questionId).expanded && getSortedDedupedAnswers(q.questionId, q.dedupedTextAnswers).length > getTextState(q.questionId).visibleCount"
+                      class="expand-hint"
+                      @click="toggleExpand(q.questionId)"
+                    >
+                      还有 {{ getSortedDedupedAnswers(q.questionId, q.dedupedTextAnswers).length - getTextState(q.questionId).visibleCount }} 种回答，点击展开查看全部
+                    </div>
+                  </div>
+                  <p v-else class="text-empty">暂无回答内容</p>
+                </template>
               </div>
             </div>
 
@@ -670,6 +785,44 @@ function goToEdit() {
   color: white;
 }
 
+.view-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  background: white;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.mode-btn.active {
+  background: #10B981;
+  border-color: #10B981;
+  color: white;
+}
+
+.deduped-badge {
+  background: #10B981;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  font-weight: 500;
+}
+
 .search-group {
   display: flex;
   align-items: center;
@@ -737,6 +890,29 @@ function goToEdit() {
   color: var(--color-text-secondary);
   flex-shrink: 0;
   padding-top: 2px;
+}
+
+.deduped-item .answer-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.answer-count-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #059669;
+  background: #ECFDF5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.answer-percent {
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
 
 .keyword-highlight {

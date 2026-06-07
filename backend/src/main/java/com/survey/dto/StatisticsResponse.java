@@ -20,5 +20,14 @@ public class StatisticsResponse {
         private Integer totalResponses;
         private Map<String, Integer> statistics;
         private List<String> textAnswers;
+        private List<DedupedTextAnswer> dedupedTextAnswers;
+        private Integer distinctTextAnswerCount;
+
+        @Data
+        public static class DedupedTextAnswer {
+            private String content;
+            private Integer count;
+            private Double percentage;
+        }
     }
 }

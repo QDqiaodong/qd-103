@@ -302,21 +302,58 @@ function goToQuestionnaire() {
                 <WordCloudView :data="getWordCloudData(q.questionId)" />
               </div>
 
-              <div class="text-answer-list readonly">
-                <div
-                  v-for="(answer, index) in (q.textAnswers || []).slice(0, 5)"
-                  :key="index"
-                  class="text-answer-item"
-                >
-                  <span class="answer-number">{{ index + 1 }}.</span>
-                  <span class="answer-content">{{ answer }}</span>
-                  <span class="answer-length">{{ answer.length }}字</span>
+              <div class="text-browser readonly">
+                <div class="browser-header">
+                  <div class="browser-title">
+                    <span class="browser-icon">📝</span>
+                    文本回答
+                    <span class="answer-count-badge">
+                      共 {{ q.totalResponses }} 条
+                      <span v-if="q.dedupedTextAnswers && q.distinctTextAnswerCount != null" class="deduped-badge">
+                        去重后 {{ q.distinctTextAnswerCount }} 种
+                      </span>
+                    </span>
+                  </div>
                 </div>
-                <div
-                  v-if="(q.textAnswers?.length || 0) > 5"
-                  class="more-hint"
-                >
-                  还有 {{ (q.textAnswers?.length || 0) - 5 }} 条回答...
+
+                <div class="text-answer-list">
+                  <template v-if="q.dedupedTextAnswers && q.dedupedTextAnswers.length > 0">
+                    <div
+                      v-for="(item, index) in q.dedupedTextAnswers.slice(0, 5)"
+                      :key="index"
+                      class="text-answer-item deduped-item"
+                    >
+                      <span class="answer-number">{{ index + 1 }}.</span>
+                      <span class="answer-content">{{ item.content }}</span>
+                      <span class="answer-meta">
+                        <span class="answer-count-tag">{{ item.count }} 次</span>
+                        <span class="answer-percent">{{ item.percentage.toFixed(1) }}%</span>
+                      </span>
+                    </div>
+                    <div
+                      v-if="(q.dedupedTextAnswers?.length || 0) > 5"
+                      class="more-hint"
+                    >
+                      还有 {{ (q.dedupedTextAnswers?.length || 0) - 5 }} 种回答...
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div
+                      v-for="(answer, index) in (q.textAnswers || []).slice(0, 5)"
+                      :key="index"
+                      class="text-answer-item"
+                    >
+                      <span class="answer-number">{{ index + 1 }}.</span>
+                      <span class="answer-content">{{ answer }}</span>
+                      <span class="answer-length">{{ answer.length }}字</span>
+                    </div>
+                    <div
+                      v-if="(q.textAnswers?.length || 0) > 5"
+                      class="more-hint"
+                    >
+                      还有 {{ (q.textAnswers?.length || 0) - 5 }} 条回答...
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -796,6 +833,77 @@ function goToQuestionnaire() {
   color: var(--color-text-secondary);
   flex-shrink: 0;
   padding-top: 2px;
+}
+
+.text-browser {
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: white;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.browser-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.browser-icon {
+  font-size: 18px;
+}
+
+.answer-count-badge {
+  background: var(--color-primary);
+  color: white;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.deduped-badge {
+  background: #10B981;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.deduped-item .answer-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.answer-count-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #059669;
+  background: #ECFDF5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.answer-percent {
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
 
 .more-hint {

@@ -109,6 +109,12 @@ export interface OptionStatistic {
   percentage: number
 }
 
+export interface DedupedTextAnswer {
+  content: string
+  count: number
+  percentage: number
+}
+
 export interface QuestionStatistic {
   questionId: string
   type: QuestionType
@@ -116,6 +122,8 @@ export interface QuestionStatistic {
   statistics: Record<string, number>
   totalResponses: number
   textAnswers?: string[]
+  dedupedTextAnswers?: DedupedTextAnswer[]
+  distinctTextAnswerCount?: number
 }
 
 export interface StatisticsResponse {
