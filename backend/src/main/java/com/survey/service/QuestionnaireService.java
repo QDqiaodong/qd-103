@@ -261,7 +261,7 @@ public class QuestionnaireService {
             return SubmitResult.fail(SubmitResult.ERROR_EXPIRED, "问卷已截止");
         }
 
-        if (!rateLimitService.tryAcquire(questionnaire, ipAddress)) {
+        if (!rateLimitService.tryAcquireIp(questionnaire, ipAddress)) {
             return SubmitResult.fail(SubmitResult.ERROR_RATE_LIMITED, "当前提交人数较多，请稍后再试");
         }
 
@@ -272,6 +272,10 @@ public class QuestionnaireService {
         if (responseRepository.existsByQuestionnaireIdAndRespondentId(id, request.getRespondentId())) {
             redisService.markSubmitted(id, request.getRespondentId());
             return SubmitResult.fail(SubmitResult.ERROR_ALREADY_SUBMITTED, "您已经提交过");
+        }
+
+        if (!rateLimitService.tryAcquireGlobal(questionnaire, ipAddress)) {
+            return SubmitResult.fail(SubmitResult.ERROR_RATE_LIMITED, "当前提交人数较多，请稍后再试");
         }
 
         SurveyResponse response = new SurveyResponse();

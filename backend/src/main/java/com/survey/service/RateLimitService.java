@@ -120,40 +120,32 @@ public class RateLimitService {
     }
 
     public boolean tryAcquire(Questionnaire questionnaire, String ipAddress) {
+        if (!tryAcquireIp(questionnaire, ipAddress)) {
+            return false;
+        }
+        return tryAcquireGlobal(questionnaire, ipAddress);
+    }
+
+    public boolean tryAcquireIp(Questionnaire questionnaire, String ipAddress) {
         Phase phase = determinePhase(questionnaire);
         String questionnaireId = questionnaire.getId();
 
-        int baseGlobalLimit = getGlobalLimit(phase);
         int baseIpLimit = getIpLimit(phase);
+        int baseGlobalLimit = getGlobalLimit(phase);
 
-        int effectiveGlobalLimit = baseGlobalLimit;
         int effectiveIpLimit = baseIpLimit;
 
-        if (phase == Phase.NEAR_DEADLINE) {
+        boolean surgeDetected = false;
+        if (phase == Phase.PEAK || phase == Phase.NEAR_DEADLINE) {
             recordSurgeRequest(questionnaireId);
-            boolean isSurge = detectSurge(questionnaireId, baseGlobalLimit);
-            if (isSurge) {
-                effectiveGlobalLimit = (int) (baseGlobalLimit * surgeTightenRatio);
+            surgeDetected = detectSurge(questionnaireId, baseGlobalLimit);
+            if (surgeDetected) {
                 effectiveIpLimit = (int) (baseIpLimit * surgeTightenRatio);
-                log.warn("问卷 {} 检测到异常冲量，限流收紧: 全局 {}/{}s -> {}/{}s, IP {}/{}s -> {}/{}s",
-                        questionnaireId,
-                        baseGlobalLimit, globalWindowSeconds,
-                        effectiveGlobalLimit, globalWindowSeconds,
+                log.warn("问卷 {} [{}] 阶段检测到异常冲量，限流收紧: IP限制 {}/{}s -> {}/{}s",
+                        questionnaireId, phase,
                         baseIpLimit, ipWindowSeconds,
                         effectiveIpLimit, ipWindowSeconds);
             }
-        }
-
-        boolean globalAllowed = redisService.isRateLimitAllowed(
-                "global:" + questionnaireId,
-                effectiveGlobalLimit,
-                globalWindowSeconds
-        );
-
-        if (!globalAllowed) {
-            log.warn("问卷 {} 全局限流触发，当前阶段: {}, 限制: {}/{}s",
-                    questionnaireId, phase, effectiveGlobalLimit, globalWindowSeconds);
-            return false;
         }
 
         boolean ipAllowed = redisService.isRateLimitAllowed(
@@ -163,11 +155,45 @@ public class RateLimitService {
         );
 
         if (!ipAllowed) {
-            log.warn("问卷 {} IP限流触发，IP: {}, 当前阶段: {}, 限制: {}/{}s",
-                    questionnaireId, ipAddress, phase, effectiveIpLimit, ipWindowSeconds);
+            log.info("问卷 {} IP限流拦截，IP: {}, 阶段: {}, 限制: {}/{}s, 冲量状态: {}",
+                    questionnaireId, ipAddress, phase, effectiveIpLimit, ipWindowSeconds, surgeDetected);
             return false;
         }
 
+        return true;
+    }
+
+    public boolean tryAcquireGlobal(Questionnaire questionnaire, String ipAddress) {
+        Phase phase = determinePhase(questionnaire);
+        String questionnaireId = questionnaire.getId();
+
+        int baseGlobalLimit = getGlobalLimit(phase);
+        int baseIpLimit = getIpLimit(phase);
+
+        int effectiveGlobalLimit = baseGlobalLimit;
+
+        boolean surgeDetected = detectSurge(questionnaireId, baseGlobalLimit);
+        if (surgeDetected) {
+            effectiveGlobalLimit = (int) (baseGlobalLimit * surgeTightenRatio);
+        }
+
+        boolean globalAllowed = redisService.isRateLimitAllowed(
+                "global:" + questionnaireId,
+                effectiveGlobalLimit,
+                globalWindowSeconds
+        );
+
+        if (!globalAllowed) {
+            log.info("问卷 {} 全局限流拦截，阶段: {}, 限制: {}/{}s, 冲量状态: {}",
+                    questionnaireId, phase, effectiveGlobalLimit, globalWindowSeconds, surgeDetected);
+            return false;
+        }
+
+        log.debug("问卷 {} 提交放行，IP: {}, 阶段: {}, 全局限制: {}/{}s, IP限制: {}/{}s, 冲量状态: {}",
+                questionnaireId, ipAddress, phase,
+                effectiveGlobalLimit, globalWindowSeconds,
+                surgeDetected ? (int) (baseIpLimit * surgeTightenRatio) : baseIpLimit, ipWindowSeconds,
+                surgeDetected);
         return true;
     }
 
@@ -186,5 +212,58 @@ public class RateLimitService {
         int surgeThreshold = (int) (expectedShortWindowCount * surgeThresholdMultiplier);
 
         return shortWindowCount >= surgeThreshold;
+    }
+
+    public RateLimitMetrics getMetrics(Questionnaire questionnaire, String ipAddress) {
+        Phase phase = determinePhase(questionnaire);
+        String questionnaireId = questionnaire.getId();
+
+        int baseGlobalLimit = getGlobalLimit(phase);
+        int baseIpLimit = getIpLimit(phase);
+
+        boolean surgeDetected = detectSurge(questionnaireId, baseGlobalLimit);
+
+        int effectiveGlobalLimit = surgeDetected ? (int) (baseGlobalLimit * surgeTightenRatio) : baseGlobalLimit;
+        int effectiveIpLimit = surgeDetected ? (int) (baseIpLimit * surgeTightenRatio) : baseIpLimit;
+
+        int globalCurrentCount = redisService.getRateLimitCount("global:" + questionnaireId, globalWindowSeconds);
+        int ipCurrentCount = redisService.getRateLimitCount("ip:" + questionnaireId + ":" + ipAddress, ipWindowSeconds);
+        int surgeCurrentCount = redisService.getRateLimitCount("surge:short:" + questionnaireId, surgeDetectionWindowSeconds);
+
+        RateLimitMetrics metrics = new RateLimitMetrics();
+        metrics.setPhase(phase.name());
+        metrics.setSurgeDetected(surgeDetected);
+        metrics.setBaseGlobalLimit(baseGlobalLimit);
+        metrics.setEffectiveGlobalLimit(effectiveGlobalLimit);
+        metrics.setGlobalCurrentCount(globalCurrentCount);
+        metrics.setGlobalWindowSeconds(globalWindowSeconds);
+        metrics.setBaseIpLimit(baseIpLimit);
+        metrics.setEffectiveIpLimit(effectiveIpLimit);
+        metrics.setIpCurrentCount(ipCurrentCount);
+        metrics.setIpWindowSeconds(ipWindowSeconds);
+        metrics.setSurgeCurrentCount(surgeCurrentCount);
+        metrics.setSurgeWindowSeconds(surgeDetectionWindowSeconds);
+        metrics.setSurgeThresholdMultiplier(surgeThresholdMultiplier);
+        metrics.setSurgeTightenRatio(surgeTightenRatio);
+
+        return metrics;
+    }
+
+    @lombok.Data
+    public static class RateLimitMetrics {
+        private String phase;
+        private boolean surgeDetected;
+        private int baseGlobalLimit;
+        private int effectiveGlobalLimit;
+        private int globalCurrentCount;
+        private int globalWindowSeconds;
+        private int baseIpLimit;
+        private int effectiveIpLimit;
+        private int ipCurrentCount;
+        private int ipWindowSeconds;
+        private int surgeCurrentCount;
+        private int surgeWindowSeconds;
+        private double surgeThresholdMultiplier;
+        private double surgeTightenRatio;
     }
 }
