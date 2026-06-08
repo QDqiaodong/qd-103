@@ -7,7 +7,8 @@ import type {
   Fingerprint,
   FingerprintStatistics,
   Snapshot,
-  SnapshotDetail
+  SnapshotDetail,
+  DraftData
 } from '../types'
 
 const BASE_URL = '/api'
@@ -199,6 +200,67 @@ export async function createSnapshot(questionnaireId: string, reason?: string): 
     throw new Error(getErrorMessage(response, '创建快照失败'))
   }
   return response.data.data || null
+}
+
+// 获取草稿
+export async function getDraft(questionnaireId: string, respondentId: string): Promise<DraftData | null> {
+  const response = await api.get<ApiResponse<DraftData>>(`/questionnaires/${questionnaireId}/draft`, {
+    params: { respondentId }
+  })
+  if (!isSuccess(response)) {
+    return null
+  }
+  return response.data.data || null
+}
+
+// 保存草稿
+export async function saveDraft(questionnaireId: string, draft: DraftData): Promise<boolean> {
+  try {
+    const response = await api.post<ApiResponse<boolean>>(`/questionnaires/${questionnaireId}/draft`, draft)
+    return isSuccess(response)
+  } catch (e) {
+    return false
+  }
+}
+
+// 删除草稿
+export async function deleteDraft(questionnaireId: string, respondentId: string): Promise<boolean> {
+  try {
+    const response = await api.delete<ApiResponse<boolean>>(`/questionnaires/${questionnaireId}/draft`, {
+      params: { respondentId }
+    })
+    return isSuccess(response)
+  } catch (e) {
+    return false
+  }
+}
+
+// 本地草稿存储
+const LOCAL_DRAFT_PREFIX = 'survey_draft_'
+
+export function saveLocalDraft(questionnaireId: string, data: DraftData): void {
+  try {
+    localStorage.setItem(LOCAL_DRAFT_PREFIX + questionnaireId, JSON.stringify(data))
+  } catch (e) {
+    console.error('保存本地草稿失败', e)
+  }
+}
+
+export function getLocalDraft(questionnaireId: string): DraftData | null {
+  try {
+    const data = localStorage.getItem(LOCAL_DRAFT_PREFIX + questionnaireId)
+    return data ? JSON.parse(data) : null
+  } catch (e) {
+    return null
+  }
+}
+
+export function removeLocalDraft(questionnaireId: string): void {
+  try {
+    localStorage.removeItem(LOCAL_DRAFT_PREFIX + questionnaireId)
+  } catch (e) {
+    console.error('删除本地草稿失败', e)
+  }
 }
 
 export default api

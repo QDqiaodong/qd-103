@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
-import type { Answer, CoverConfig } from '../types'
+import type { Answer, CoverConfig, DraftData, DraftAnswer } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
 import { getVisibleQuestions, getTerminateInfo } from '../lib/utils'
 import FormRenderer from '../engine/FormRenderer.vue'
@@ -18,6 +18,7 @@ const submitting = ref(false)
 const submitted = ref(false)
 const errorMsg = ref('')
 const startTime = ref(Date.now())
+const lastQuestionId = ref('')
 
 const showPasswordModal = ref(false)
 const passwordInput = ref('')
@@ -25,7 +26,15 @@ const passwordError = ref('')
 const verifyingPassword = ref(false)
 const verifiedPassword = ref('')
 
+const showResumeModal = ref(false)
+const resumeDraftInfo = ref<DraftData | null>(null)
+const resuming = ref(false)
+
+let saveDraftTimer: ReturnType<typeof setTimeout> | null = null
+const SAVE_DRAFT_DEBOUNCE_MS = 2000
+
 const questionnaireId = computed(() => route.params.id as string)
+const respondentId = computed(() => api.getRespondentId())
 
 function getStoredPassword(qid: string): string | null {
   try {
@@ -57,6 +66,15 @@ onMounted(async () => {
   await loadQuestionnaire()
 })
 
+onUnmounted(() => {
+  if (saveDraftTimer) {
+    clearTimeout(saveDraftTimer)
+  }
+  if (store.currentQuestionnaire && isActive.value && !submitted.value) {
+    saveDraftToStorage()
+  }
+})
+
 async function loadQuestionnaire() {
   const storedPwd = getStoredPassword(questionnaireId.value)
   await store.fetchQuestionnaire(questionnaireId.value, storedPwd || undefined)
@@ -64,11 +82,28 @@ async function loadQuestionnaire() {
   if (store.currentQuestionnaire?.passwordProtected) {
     if (storedPwd && store.currentQuestionnaire.questions.length > 0) {
       verifiedPassword.value = storedPwd
+      await checkForDraft()
     } else {
       showPasswordModal.value = true
     }
   } else {
     verifiedPassword.value = ''
+    await checkForDraft()
+  }
+}
+
+async function checkForDraft() {
+  if (!store.currentQuestionnaire || !isActive.value) return
+  if (submitted.value) return
+
+  const draft = await loadDraft()
+  if (draft && draft.answers && draft.answers.length > 0) {
+    const totalQuestions = visibleQuestions.value.length || store.currentQuestionnaire.questions.length
+    const completed = getCompletedCount(draft)
+    if (completed > 0 && completed < totalQuestions) {
+      resumeDraftInfo.value = draft
+      showResumeModal.value = true
+    }
   }
 }
 
@@ -89,6 +124,7 @@ async function verifyPassword() {
       showPasswordModal.value = false
       passwordInput.value = ''
       await store.fetchQuestionnaire(questionnaireId.value, verifiedPassword.value)
+      await checkForDraft()
     } else {
       passwordError.value = '口令错误，请重试'
     }
@@ -189,6 +225,144 @@ function isColorDark(hex: string): boolean {
 
 function handleAnswer(questionId: string, value: string | string[]) {
   answers.value[questionId] = value
+  lastQuestionId.value = questionId
+  scheduleSaveDraft()
+}
+
+function scheduleSaveDraft() {
+  if (saveDraftTimer) {
+    clearTimeout(saveDraftTimer)
+  }
+  saveDraftTimer = setTimeout(() => {
+    saveDraftToStorage()
+  }, SAVE_DRAFT_DEBOUNCE_MS)
+}
+
+function buildDraftData(): DraftData {
+  const answerList: DraftAnswer[] = Object.entries(answers.value)
+    .filter(([_, value]) => {
+      if (Array.isArray(value)) {
+        return value.length > 0
+      }
+      return value !== '' && value !== null && value !== undefined
+    })
+    .map(([questionId, value]) => ({
+      questionId,
+      value
+    }))
+
+  const elapsedSeconds = Math.floor((Date.now() - startTime.value) / 1000)
+
+  return {
+    questionnaireId: questionnaireId.value,
+    respondentId: respondentId.value,
+    answers: answerList,
+    lastQuestionId: lastQuestionId.value,
+    elapsedSeconds,
+    updatedAt: new Date().toISOString()
+  }
+}
+
+async function saveDraftToStorage() {
+  if (!store.currentQuestionnaire || !isActive.value) return
+
+  const draft = buildDraftData()
+  
+  api.saveLocalDraft(questionnaireId.value, draft)
+  
+  if (verifiedPassword.value || !store.currentQuestionnaire.passwordProtected) {
+    try {
+      await api.saveDraft(questionnaireId.value, draft)
+    } catch (e) {
+    }
+  }
+}
+
+async function loadDraft(): Promise<DraftData | null> {
+  let draft: DraftData | null = null
+  
+  try {
+    draft = await api.getDraft(questionnaireId.value, respondentId.value)
+  } catch (e) {
+  }
+  
+  if (!draft) {
+    draft = api.getLocalDraft(questionnaireId.value)
+  }
+  
+  return draft
+}
+
+function applyDraft(draft: DraftData) {
+  const newAnswers: Record<string, string | string[]> = {}
+  for (const ans of draft.answers) {
+    newAnswers[ans.questionId] = ans.value
+  }
+  answers.value = newAnswers
+  
+  if (draft.elapsedSeconds) {
+    startTime.value = Date.now() - draft.elapsedSeconds * 1000
+  }
+  
+  if (draft.lastQuestionId) {
+    lastQuestionId.value = draft.lastQuestionId
+  }
+}
+
+async function resumeSurvey() {
+  if (!resumeDraftInfo.value) return
+  
+  resuming.value = true
+  try {
+    applyDraft(resumeDraftInfo.value)
+    showResumeModal.value = false
+    
+    await nextTick()
+    
+    if (lastQuestionId.value) {
+      setTimeout(() => {
+        const el = document.getElementById(`question-${lastQuestionId.value}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 300)
+    }
+  } finally {
+    resuming.value = false
+  }
+}
+
+function startNewSurvey() {
+  api.removeLocalDraft(questionnaireId.value)
+  api.deleteDraft(questionnaireId.value, respondentId.value)
+  answers.value = {}
+  lastQuestionId.value = ''
+  startTime.value = Date.now()
+  showResumeModal.value = false
+}
+
+function formatDraftTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  
+  if (diffMins < 1) return '刚刚'
+  if (diffMins < 60) return `${diffMins} 分钟前`
+  if (diffHours < 24) return `${diffHours} 小时前`
+  if (diffDays < 7) return `${diffDays} 天前`
+  return date.toLocaleDateString('zh-CN')
+}
+
+function getCompletedCount(draft: DraftData): number {
+  return draft.answers.filter(a => {
+    if (Array.isArray(a.value)) {
+      return a.value.length > 0
+    }
+    return a.value !== '' && a.value !== null && a.value !== undefined
+  }).length
 }
 
 async function submitForm() {
@@ -213,6 +387,10 @@ async function submitForm() {
     )
     if (success) {
       submitted.value = true
+      api.removeLocalDraft(questionnaireId.value)
+      try {
+        await api.deleteDraft(questionnaireId.value, respondentId.value)
+      } catch (e) {}
     } else {
       errorMsg.value = store.error || '提交失败'
     }
@@ -256,6 +434,42 @@ function goHome() {
               @click="verifyPassword"
             >
               {{ verifyingPassword ? '验证中...' : '确认' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showResumeModal && resumeDraftInfo" class="resume-modal-overlay" @click.self="startNewSurvey">
+        <div class="resume-modal">
+          <div class="resume-modal-header">
+            <div class="resume-icon">📝</div>
+            <h3>检测到未完成的作答</h3>
+            <p class="resume-subtitle">上次作答于 {{ formatDraftTime(resumeDraftInfo.updatedAt) }}</p>
+          </div>
+          <div class="resume-modal-body">
+            <div class="resume-progress">
+              <div class="resume-progress-text">
+                已完成 {{ getCompletedCount(resumeDraftInfo) }} / {{ visibleQuestions.length || store.currentQuestionnaire?.questions.length || 0 }} 题
+              </div>
+              <div class="resume-progress-bar">
+                <div
+                  class="resume-progress-fill"
+                  :style="{ width: `${visibleQuestions.length || store.currentQuestionnaire?.questions.length ? (getCompletedCount(resumeDraftInfo) / (visibleQuestions.length || store.currentQuestionnaire?.questions.length || 1)) * 100 : 0}%` }"
+                ></div>
+              </div>
+            </div>
+            <p class="resume-tip">是否继续上次的作答？您将回到上次离开时的位置。</p>
+          </div>
+          <div class="resume-modal-footer">
+            <button class="btn btn-outline resume-btn-secondary" @click="startNewSurvey">
+              重新开始
+            </button>
+            <button
+              class="btn btn-primary resume-btn-primary"
+              :disabled="resuming"
+              @click="resumeSurvey"
+            >
+              {{ resuming ? '恢复中...' : '继续作答' }}
             </button>
           </div>
         </div>
@@ -828,5 +1042,121 @@ function goHome() {
   font-size: 13px;
   color: #B45309;
   line-height: 1.5;
+}
+
+.resume-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.resume-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.resume-modal-header {
+  text-align: center;
+  padding: 32px 24px 20px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+}
+
+.resume-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.resume-modal-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 4px;
+}
+
+.resume-subtitle {
+  font-size: 14px;
+  color: #6366F1;
+  margin: 0;
+}
+
+.resume-modal-body {
+  padding: 24px;
+}
+
+.resume-progress {
+  margin-bottom: 16px;
+}
+
+.resume-progress-text {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.resume-progress-bar {
+  height: 8px;
+  background: var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.resume-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4F46E5, #8B5CF6);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.resume-tip {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.resume-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 0 24px 24px;
+}
+
+.resume-btn-secondary {
+  flex: 1;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.resume-btn-primary {
+  flex: 1.2;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>

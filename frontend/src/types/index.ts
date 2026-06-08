@@ -216,6 +216,20 @@ export interface SnapshotDetail extends Snapshot {
   statistics: StatisticsResponse
 }
 
+export interface DraftAnswer {
+  questionId: string
+  value: string | string[]
+}
+
+export interface DraftData {
+  questionnaireId: string
+  respondentId: string
+  answers: DraftAnswer[]
+  lastQuestionId: string
+  elapsedSeconds: number
+  updatedAt: string
+}
+
 export interface ApiResponse<T> {
   code: number
   data?: T

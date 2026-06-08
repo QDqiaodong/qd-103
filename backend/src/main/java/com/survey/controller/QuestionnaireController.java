@@ -200,4 +200,34 @@ public class QuestionnaireController {
         );
         return ResponseEntity.ok(ApiResponse.success(data));
     }
+
+    @GetMapping("/{id}/draft")
+    public ResponseEntity<ApiResponse<DraftDTO>> getDraft(
+            @PathVariable String id,
+            @RequestParam String respondentId) {
+        DraftDTO draft = questionnaireService.getDraft(id, respondentId);
+        if (draft == null) {
+            return ResponseEntity.ok(ApiResponse.success(null));
+        }
+        return ResponseEntity.ok(ApiResponse.success(draft));
+    }
+
+    @PostMapping("/{id}/draft")
+    public ResponseEntity<ApiResponse<Boolean>> saveDraft(
+            @PathVariable String id,
+            @RequestBody DraftDTO draft) {
+        boolean success = questionnaireService.saveDraft(id, draft);
+        if (!success) {
+            return ResponseEntity.ok(ApiResponse.error("保存草稿失败"));
+        }
+        return ResponseEntity.ok(ApiResponse.success(true));
+    }
+
+    @DeleteMapping("/{id}/draft")
+    public ResponseEntity<ApiResponse<Boolean>> deleteDraft(
+            @PathVariable String id,
+            @RequestParam String respondentId) {
+        boolean success = questionnaireService.deleteDraft(id, respondentId);
+        return ResponseEntity.ok(ApiResponse.success(success));
+    }
 }

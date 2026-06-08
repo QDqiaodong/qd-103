@@ -458,6 +458,7 @@ public class QuestionnaireService {
         }
 
         redisService.markSubmitted(id, request.getRespondentId());
+        redisService.deleteDraft(id, request.getRespondentId());
 
         if (questionnaire.getMaxResponses() != null && questionnaire.getMaxResponses() > 0) {
             int currentCount = responseRepository.countByQuestionnaireId(id);
@@ -883,6 +884,53 @@ public class QuestionnaireService {
 
         public int getTotalCorrected() {
             return expiredCount + reactivatedCount + quotaFullCount;
+        }
+    }
+
+    public boolean saveDraft(String questionnaireId, DraftDTO draft) {
+        Questionnaire questionnaire = questionnaireRepository.findById(questionnaireId).orElse(null);
+        if (questionnaire == null) {
+            return false;
+        }
+        if (!"active".equals(questionnaire.getStatus())) {
+            return false;
+        }
+        try {
+            draft.setQuestionnaireId(questionnaireId);
+            draft.setUpdatedAt(LocalDateTime.now().toString());
+            String draftJson = objectMapper.writeValueAsString(draft);
+            redisService.saveDraft(questionnaireId, draft.getRespondentId(), draftJson);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public DraftDTO getDraft(String questionnaireId, String respondentId) {
+        Questionnaire questionnaire = questionnaireRepository.findById(questionnaireId).orElse(null);
+        if (questionnaire == null) {
+            return null;
+        }
+        if (!"active".equals(questionnaire.getStatus())) {
+            return null;
+        }
+        try {
+            String draftJson = redisService.getDraft(questionnaireId, respondentId);
+            if (draftJson == null || draftJson.isEmpty()) {
+                return null;
+            }
+            return objectMapper.readValue(draftJson, DraftDTO.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public boolean deleteDraft(String questionnaireId, String respondentId) {
+        try {
+            redisService.deleteDraft(questionnaireId, respondentId);
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 
