@@ -144,12 +144,13 @@ function addQuestion(type: QuestionType) {
     type,
     content: '',
     orderIndex: questions.value.length,
-    required: true
+    required: true,
+    showCondition: null
   }
   if (type !== 'text') {
     question.options = [
-      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项1', orderIndex: 0 },
-      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项2', orderIndex: 1 }
+      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项1', orderIndex: 0, terminateSurvey: false, terminateMessage: '' },
+      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项2', orderIndex: 1, terminateSurvey: false, terminateMessage: '' }
     ]
   }
   questions.value.push(question)

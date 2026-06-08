@@ -176,10 +176,14 @@ public class QuestionnaireService {
 
         questionnaire = questionnaireRepository.save(questionnaire);
 
+        Map<String, String> questionIdMap = new HashMap<>();
+        Map<String, Map<String, String>> optionIdMap = new HashMap<>();
+
         if (dto.getQuestions() != null) {
             for (QuestionDTO qdto : dto.getQuestions()) {
                 Question question = new Question();
-                question.setId(UUID.randomUUID().toString());
+                String newQuestionId = UUID.randomUUID().toString();
+                question.setId(newQuestionId);
                 question.setQuestionnaire(questionnaire);
                 question.setType(qdto.getType());
                 question.setContent(qdto.getContent());
@@ -187,22 +191,37 @@ public class QuestionnaireService {
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
                 question.setShowCondition(qdto.getShowCondition());
 
+                if (qdto.getId() != null) {
+                    questionIdMap.put(qdto.getId(), newQuestionId);
+                }
+
+                Map<String, String> optMap = new HashMap<>();
                 if (qdto.getOptions() != null) {
                     for (OptionDTO odto : qdto.getOptions()) {
                         OptionItem option = new OptionItem();
-                        option.setId(UUID.randomUUID().toString());
+                        String newOptionId = UUID.randomUUID().toString();
+                        option.setId(newOptionId);
                         option.setQuestion(question);
                         option.setContent(odto.getContent());
                         option.setOrderIndex(odto.getOrderIndex());
                         option.setTerminateSurvey(odto.getTerminateSurvey() != null ? odto.getTerminateSurvey() : false);
                         option.setTerminateMessage(odto.getTerminateMessage());
                         question.getOptions().add(option);
+
+                        if (odto.getId() != null) {
+                            optMap.put(odto.getId(), newOptionId);
+                        }
                     }
+                }
+                if (qdto.getId() != null) {
+                    optionIdMap.put(qdto.getId(), optMap);
                 }
 
                 question = questionRepository.save(question);
                 questionnaire.getQuestions().add(question);
             }
+
+            updateShowConditionIds(questionnaire.getQuestions(), questionIdMap, optionIdMap);
         }
 
         return toDTO(questionnaire, true, questionnaire.getCreatorToken());
@@ -241,6 +260,9 @@ public class QuestionnaireService {
 
         questionnaire = questionnaireRepository.save(questionnaire);
 
+        Map<String, String> questionIdMap = new HashMap<>();
+        Map<String, Map<String, String>> optionIdMap = new HashMap<>();
+
         if (dto.getQuestions() != null) {
             Map<String, Question> existingQuestions = questionnaire.getQuestions().stream()
                     .collect(Collectors.toMap(Question::getId, q -> q));
@@ -272,6 +294,10 @@ public class QuestionnaireService {
                     question = existingQuestions.get(qdto.getId());
                 }
 
+                if (qdto.getId() != null) {
+                    questionIdMap.put(qdto.getId(), question.getId());
+                }
+
                 String oldType = question.getType();
                 question.setType(qdto.getType());
                 question.setContent(qdto.getContent());
@@ -284,6 +310,7 @@ public class QuestionnaireService {
                     question.getOptions().clear();
                 }
 
+                Map<String, String> optMap = new HashMap<>();
                 if (qdto.getOptions() != null) {
                     Map<String, OptionItem> existingOptions = question.getOptions().stream()
                             .collect(Collectors.toMap(OptionItem::getId, o -> o));
@@ -310,9 +337,16 @@ public class QuestionnaireService {
                         option.setTerminateSurvey(odto.getTerminateSurvey() != null ? odto.getTerminateSurvey() : false);
                         option.setTerminateMessage(odto.getTerminateMessage());
                         updatedOptions.add(option);
+
+                        if (odto.getId() != null) {
+                            optMap.put(odto.getId(), option.getId());
+                        }
                     }
                     question.getOptions().clear();
                     question.getOptions().addAll(updatedOptions);
+                }
+                if (qdto.getId() != null) {
+                    optionIdMap.put(qdto.getId(), optMap);
                 }
 
                 updatedQuestions.add(question);
@@ -320,6 +354,8 @@ public class QuestionnaireService {
 
             questionnaire.getQuestions().clear();
             questionnaire.getQuestions().addAll(updatedQuestions);
+
+            updateShowConditionIds(questionnaire.getQuestions(), questionIdMap, optionIdMap);
         }
 
         questionnaire = questionnaireRepository.save(questionnaire);
@@ -661,6 +697,45 @@ public class QuestionnaireService {
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken) {
         return toDTO(questionnaire, includeCreatorToken, null, true);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void updateShowConditionIds(List<Question> questions, Map<String, String> questionIdMap, Map<String, Map<String, String>> optionIdMap) {
+        for (Question question : questions) {
+            String showCondition = question.getShowCondition();
+            if (showCondition == null || showCondition.trim().isEmpty()) {
+                continue;
+            }
+            try {
+                Map<String, Object> condition = objectMapper.readValue(showCondition, Map.class);
+                String dependOnQuestionId = (String) condition.get("dependOnQuestionId");
+                List<String> optionIds = (List<String>) condition.get("optionIds");
+
+                if (dependOnQuestionId != null && questionIdMap.containsKey(dependOnQuestionId)) {
+                    String newQuestionId = questionIdMap.get(dependOnQuestionId);
+                    condition.put("dependOnQuestionId", newQuestionId);
+
+                    if (optionIds != null && !optionIds.isEmpty()) {
+                        Map<String, String> optMap = optionIdMap.get(dependOnQuestionId);
+                        if (optMap != null) {
+                            List<String> newOptionIds = new ArrayList<>();
+                            for (String optId : optionIds) {
+                                if (optMap.containsKey(optId)) {
+                                    newOptionIds.add(optMap.get(optId));
+                                } else {
+                                    newOptionIds.add(optId);
+                                }
+                            }
+                            condition.put("optionIds", newOptionIds);
+                        }
+                    }
+                }
+
+                question.setShowCondition(objectMapper.writeValueAsString(condition));
+            } catch (Exception e) {
+                // 解析失败，保持原样
+            }
+        }
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken, String viewerToken) {

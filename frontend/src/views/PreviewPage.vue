@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { CoverConfig } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
+import { getVisibleQuestions, getTerminateInfo } from '../lib/utils'
+import FormRenderer from '../engine/FormRenderer.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useQuestionnaireStore()
+
+const answers = ref<Record<string, string | string[]>>({})
 
 const questionnaireId = computed(() => route.params.id as string)
 
@@ -20,6 +24,24 @@ loadAndPreview()
 function goToEdit() {
   router.push(`/edit/${questionnaireId.value}`)
 }
+
+function handleAnswer(questionId: string, value: string | string[]) {
+  answers.value[questionId] = value
+}
+
+function resetPreview() {
+  answers.value = {}
+}
+
+const visibleQuestions = computed(() => {
+  if (!store.currentQuestionnaire) return []
+  return getVisibleQuestions(store.currentQuestionnaire.questions, answers.value)
+})
+
+const terminateInfo = computed(() => {
+  if (!store.currentQuestionnaire) return { terminated: false, message: '' }
+  return getTerminateInfo(store.currentQuestionnaire.questions, answers.value)
+})
 
 const coverConfig = computed<CoverConfig>(() => {
   return { ...DEFAULT_COVER_CONFIG, ...(store.currentQuestionnaire?.coverConfig || {}) }
@@ -57,9 +79,14 @@ function isColorDark(hex: string): boolean {
       <div class="container">
         <div class="header-content">
           <h1 class="page-title">问卷预览</h1>
-          <button class="btn btn-primary" @click="goToEdit">
-            进入编辑
-          </button>
+          <div class="header-actions">
+            <button class="btn btn-outline" @click="resetPreview">
+              重置预览
+            </button>
+            <button class="btn btn-primary" @click="goToEdit">
+              进入编辑
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -75,7 +102,7 @@ function isColorDark(hex: string): boolean {
 
       <div v-else class="preview-container">
         <div class="preview-notice">
-          此页面仅供预览，不收集数据
+          此页面仅供预览，可点击选项测试分支逻辑效果，不收集数据
         </div>
 
         <div class="preview-body">
@@ -126,44 +153,23 @@ function isColorDark(hex: string): boolean {
             <div class="cover-accent-bar" :style="{ background: coverConfig.accentColor }"></div>
           </header>
 
-          <div class="preview-questions">
-            <div
-              v-for="(question, index) in store.currentQuestionnaire.questions"
-              :key="question.id"
-              class="preview-question"
-            >
-              <div class="question-label">
-                <span class="question-number">{{ index + 1 }}.</span>
-                <span v-if="question.required" class="required-mark">*</span>
-              </div>
-              <p class="question-text">{{ question.content }}</p>
-
-              <div v-if="question.type === 'single'" class="question-options">
-                <div
-                  v-for="option in question.options"
-                  :key="option.id"
-                  class="preview-option"
-                >
-                  ○ {{ option.content }}
-                </div>
-              </div>
-
-              <div v-else-if="question.type === 'multiple'" class="question-options">
-                <div
-                  v-for="option in question.options"
-                  :key="option.id"
-                  class="preview-option"
-                >
-                  ☐ {{ option.content }}
-                </div>
-              </div>
-
-              <div v-else class="question-options">
-                <div class="preview-text-placeholder">
-                  文本输入框
-                </div>
-              </div>
+          <div v-if="terminateInfo.terminated" class="terminate-banner">
+            <div class="terminate-icon">⏹️</div>
+            <div class="terminate-content">
+              <p class="terminate-title">问卷将在此结束（预览效果）</p>
+              <p v-if="terminateInfo.message" class="terminate-message">{{ terminateInfo.message }}</p>
             </div>
+          </div>
+
+          <FormRenderer
+            v-if="store.currentQuestionnaire.questions.length > 0"
+            :questions="store.currentQuestionnaire.questions"
+            :answers="answers"
+            @answer="handleAnswer"
+          />
+
+          <div v-else class="empty-questions">
+            <p>暂无题目</p>
           </div>
         </div>
       </div>
@@ -189,6 +195,11 @@ function isColorDark(hex: string): boolean {
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .preview-container {
   max-width: 700px;
   margin: 0 auto;
@@ -196,8 +207,8 @@ function isColorDark(hex: string): boolean {
 }
 
 .preview-notice {
-  background: #FEF3C7;
-  color: #92400E;
+  background: #DBEAFE;
+  color: #1E40AF;
   padding: 12px 20px;
   border-radius: var(--radius);
   text-align: center;
@@ -344,61 +355,59 @@ function isColorDark(hex: string): boolean {
   width: 100%;
 }
 
-.preview-questions {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.preview-question {
-  padding: 16px;
-  background: var(--color-bg);
-  border-radius: var(--radius);
-}
-
-.question-label {
+.terminate-banner {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border-bottom: 1px solid #F59E0B;
 }
 
-.question-number {
-  font-weight: 600;
+.terminate-icon {
+  font-size: 28px;
+  flex-shrink: 0;
 }
 
-.required-mark {
-  color: var(--color-danger);
+.terminate-content {
+  flex: 1;
 }
 
-.question-text {
-  margin-bottom: 12px;
+.terminate-title {
+  margin: 0 0 4px;
   font-size: 15px;
+  font-weight: 600;
+  color: #92400E;
 }
 
-.question-options {
-  padding-left: 20px;
+.terminate-message {
+  margin: 0;
+  font-size: 13px;
+  color: #B45309;
+  line-height: 1.5;
 }
 
-.preview-option {
-  padding: 8px 0;
-  color: var(--color-text-secondary);
-}
-
-.preview-text-placeholder {
-  padding: 12px;
-  background: white;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text-secondary);
-  font-size: 14px;
+.empty-questions {
+  padding: 60px 20px;
   text-align: center;
+  color: var(--color-text-secondary);
 }
 
 .loading,
 .error-state {
   text-align: center;
   padding: 60px 20px;
+}
+
+@media (max-width: 640px) {
+  .header-content {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .header-actions {
+    justify-content: center;
+  }
 }
 </style>
