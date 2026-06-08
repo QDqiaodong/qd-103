@@ -9,6 +9,7 @@ public class SubmitRequest {
     private List<AnswerDTO> answers;
     private Integer submitDurationSeconds;
     private String userAgent;
+    private String accessPassword;
 
     @Data
     public static class AnswerDTO {

@@ -22,6 +22,9 @@ const questions = ref<(Question & { options?: QuestionOption[] })[]>([])
 const saving = ref(false)
 const activeTab = ref<'questions' | 'cover' | 'snapshots'>('questions')
 const coverConfig = ref<CoverConfig>({ ...DEFAULT_COVER_CONFIG })
+const passwordEnabled = ref(false)
+const accessPassword = ref('')
+const confirmPassword = ref('')
 
 const snapshots = ref<Snapshot[]>([])
 const snapshotsLoading = ref(false)
@@ -46,6 +49,9 @@ onMounted(async () => {
     if (store.currentQuestionnaire.coverConfig) {
       coverConfig.value = { ...DEFAULT_COVER_CONFIG, ...store.currentQuestionnaire.coverConfig }
     }
+    passwordEnabled.value = !!store.currentQuestionnaire.accessPassword
+    accessPassword.value = store.currentQuestionnaire.accessPassword || ''
+    confirmPassword.value = store.currentQuestionnaire.accessPassword || ''
   }
   await loadSnapshots()
 })
@@ -182,6 +188,17 @@ function cloneQuestion(index: number) {
 async function saveQuestionnaire() {
   if (!canSave.value) return
 
+  if (passwordEnabled.value) {
+    if (!accessPassword.value.trim()) {
+      alert('请输入访问口令')
+      return
+    }
+    if (accessPassword.value !== confirmPassword.value) {
+      alert('两次输入的口令不一致')
+      return
+    }
+  }
+
   saving.value = true
   try {
     const data = {
@@ -191,7 +208,8 @@ async function saveQuestionnaire() {
       status: status.value,
       resultVisibility: resultVisibility.value,
       questions: questions.value,
-      coverConfig: coverConfig.value
+      coverConfig: coverConfig.value,
+      accessPassword: passwordEnabled.value ? accessPassword.value.trim() : ''
     }
 
     const result = await store.updateQuestionnaire(questionnaireId.value, data)
@@ -308,6 +326,44 @@ function copyLink() {
                   <span class="visibility-label">{{ opt.label }}</span>
                 </div>
                 <p class="visibility-desc">{{ opt.description }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">访问口令</label>
+            <div class="password-toggle">
+              <label class="toggle-label">
+                <input
+                  type="checkbox"
+                  v-model="passwordEnabled"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-text">启用口令访问</span>
+              </label>
+              <p class="password-hint">开启后，访客需输入正确口令才能进入填写页</p>
+            </div>
+
+            <div v-if="passwordEnabled" class="password-inputs">
+              <div class="form-group">
+                <label class="form-label">设置口令</label>
+                <input
+                  v-model="accessPassword"
+                  type="text"
+                  class="form-input"
+                  placeholder="请设置访问口令"
+                  maxlength="20"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">确认口令</label>
+                <input
+                  v-model="confirmPassword"
+                  type="text"
+                  class="form-input"
+                  placeholder="请再次输入口令"
+                  maxlength="20"
+                />
               </div>
             </div>
           </div>
@@ -823,6 +879,54 @@ function copyLink() {
   color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.5;
+}
+
+.password-toggle {
+  padding: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.toggle-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.password-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 8px 0 0 26px;
+  line-height: 1.5;
+}
+
+.password-inputs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.password-inputs .form-group {
+  margin-bottom: 12px;
+}
+
+.password-inputs .form-group:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 768px) {

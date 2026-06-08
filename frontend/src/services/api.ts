@@ -38,13 +38,24 @@ export async function getQuestionnaires(): Promise<Questionnaire[]> {
 }
 
 // 获取问卷详情
-export async function getQuestionnaire(id: string, viewerToken?: string): Promise<Questionnaire | null> {
-  const params = viewerToken ? { viewerToken } : {}
+export async function getQuestionnaire(id: string, viewerToken?: string, accessPassword?: string): Promise<Questionnaire | null> {
+  const params: Record<string, string> = {}
+  if (viewerToken) params.viewerToken = viewerToken
+  if (accessPassword) params.accessPassword = accessPassword
   const response = await api.get<ApiResponse<Questionnaire>>(`/questionnaires/${id}`, { params })
   if (!isSuccess(response)) {
     throw new Error(getErrorMessage(response, '获取问卷详情失败'))
   }
   return response.data.data || null
+}
+
+// 验证访问口令
+export async function verifyAccessPassword(id: string, password: string): Promise<boolean> {
+  const response = await api.post<ApiResponse<boolean>>(`/questionnaires/${id}/verify-password`, { password })
+  if (!isSuccess(response)) {
+    throw new Error(getErrorMessage(response, '验证失败'))
+  }
+  return response.data.data || false
 }
 
 // 创建问卷

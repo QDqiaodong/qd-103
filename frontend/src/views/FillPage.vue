@@ -6,6 +6,7 @@ import type { Answer, CoverConfig } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
 import FormRenderer from '../engine/FormRenderer.vue'
 import QuestionNavigation from '../components/QuestionNavigation.vue'
+import * as api from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,7 +18,28 @@ const submitted = ref(false)
 const errorMsg = ref('')
 const startTime = ref(Date.now())
 
+const showPasswordModal = ref(false)
+const passwordInput = ref('')
+const passwordError = ref('')
+const verifyingPassword = ref(false)
+const verifiedPassword = ref('')
+
 const questionnaireId = computed(() => route.params.id as string)
+
+function getStoredPassword(qid: string): string | null {
+  try {
+    const stored = localStorage.getItem(`survey_access_pwd_${qid}`)
+    return stored
+  } catch (e) {
+    return null
+  }
+}
+
+function setStoredPassword(qid: string, password: string) {
+  try {
+    localStorage.setItem(`survey_access_pwd_${qid}`, password)
+  } catch (e) {}
+}
 
 const showNavigation = computed(() => {
   return store.currentQuestionnaire && store.currentQuestionnaire.questions.length >= 5
@@ -31,8 +53,50 @@ function jumpToQuestion(questionId: string) {
 }
 
 onMounted(async () => {
-  await store.fetchQuestionnaire(questionnaireId.value)
+  await loadQuestionnaire()
 })
+
+async function loadQuestionnaire() {
+  const storedPwd = getStoredPassword(questionnaireId.value)
+  await store.fetchQuestionnaire(questionnaireId.value, storedPwd || undefined)
+
+  if (store.currentQuestionnaire?.passwordProtected) {
+    if (storedPwd && store.currentQuestionnaire.questions.length > 0) {
+      verifiedPassword.value = storedPwd
+    } else {
+      showPasswordModal.value = true
+    }
+  } else {
+    verifiedPassword.value = ''
+  }
+}
+
+async function verifyPassword() {
+  if (!passwordInput.value.trim()) {
+    passwordError.value = '请输入访问口令'
+    return
+  }
+
+  verifyingPassword.value = true
+  passwordError.value = ''
+
+  try {
+    const valid = await api.verifyAccessPassword(questionnaireId.value, passwordInput.value.trim())
+    if (valid) {
+      verifiedPassword.value = passwordInput.value.trim()
+      setStoredPassword(questionnaireId.value, passwordInput.value.trim())
+      showPasswordModal.value = false
+      passwordInput.value = ''
+      await store.fetchQuestionnaire(questionnaireId.value, verifiedPassword.value)
+    } else {
+      passwordError.value = '口令错误，请重试'
+    }
+  } catch (e) {
+    passwordError.value = '验证失败，请稍后重试'
+  } finally {
+    verifyingPassword.value = false
+  }
+}
 
 const canSubmit = computed(() => {
   if (!store.currentQuestionnaire) return false
@@ -103,7 +167,12 @@ async function submitForm() {
 
     const submitDurationSeconds = Math.floor((Date.now() - startTime.value) / 1000)
 
-    const success = await store.submitQuestionnaire(questionnaireId.value, answerList, submitDurationSeconds)
+    const success = await store.submitQuestionnaire(
+      questionnaireId.value,
+      answerList,
+      submitDurationSeconds,
+      verifiedPassword.value || undefined
+    )
     if (success) {
       submitted.value = true
     } else {
@@ -121,6 +190,40 @@ function goHome() {
 
 <template>
   <div class="fill-page">
+    <Teleport to="body">
+      <div v-if="showPasswordModal" class="password-modal-overlay" @click.self="showPasswordModal = false">
+        <div class="password-modal">
+          <div class="password-modal-header">
+            <div class="password-icon">🔒</div>
+            <h3>访问口令验证</h3>
+            <p>该问卷需要口令才能访问</p>
+          </div>
+          <div class="password-modal-body">
+            <input
+              v-model="passwordInput"
+              type="text"
+              class="password-input"
+              placeholder="请输入访问口令"
+              @keyup.enter="verifyPassword"
+              autofocus
+            />
+            <div v-if="passwordError" class="password-error">
+              {{ passwordError }}
+            </div>
+          </div>
+          <div class="password-modal-footer">
+            <button
+              class="btn btn-primary password-submit-btn"
+              :disabled="verifyingPassword || !passwordInput.trim()"
+              @click="verifyPassword"
+            >
+              {{ verifyingPassword ? '验证中...' : '确认' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <div :class="['fill-container', { 'with-nav': showNavigation }]">
       <aside v-if="showNavigation" class="nav-sidebar">
         <QuestionNavigation
@@ -248,6 +351,89 @@ function goHome() {
 </template>
 
 <style scoped>
+.password-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.password-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.password-modal-header {
+  text-align: center;
+  padding: 32px 24px 20px;
+}
+
+.password-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.password-modal-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.password-modal-header p {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.password-modal-body {
+  padding: 0 24px 20px;
+}
+
+.password-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.password-input:focus {
+  border-color: var(--color-primary);
+}
+
+.password-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-danger);
+  text-align: center;
+}
+
+.password-modal-footer {
+  padding: 0 24px 24px;
+}
+
+.password-submit-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .fill-page {
   min-height: 100vh;
   background: linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%);

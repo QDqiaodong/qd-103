@@ -45,6 +45,9 @@ public class Questionnaire {
     @Column(name = "cover_config", columnDefinition = "TEXT")
     private String coverConfig;
 
+    @Column(name = "access_password")
+    private String accessPassword;
+
     @Transient
     private Integer responseCount;
 }

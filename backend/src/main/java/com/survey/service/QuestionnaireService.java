@@ -55,6 +55,10 @@ public class QuestionnaireService {
     }
 
     public QuestionnaireDTO getQuestionnaire(String id, String viewerToken) {
+        return getQuestionnaire(id, viewerToken, null);
+    }
+
+    public QuestionnaireDTO getQuestionnaire(String id, String viewerToken, String accessPassword) {
         Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(id);
         if (questionnaire == null) {
             return null;
@@ -67,7 +71,24 @@ public class QuestionnaireService {
             questionnaire = questionnaireRepository.findByIdWithQuestions(id);
         }
 
-        return toDTO(questionnaire, false, viewerToken);
+        boolean isCreator = viewerToken != null && viewerToken.equals(questionnaire.getCreatorToken());
+        boolean hasPassword = questionnaire.getAccessPassword() != null && !questionnaire.getAccessPassword().trim().isEmpty();
+        boolean passwordVerified = !hasPassword || isCreator ||
+                (accessPassword != null && accessPassword.equals(questionnaire.getAccessPassword()));
+
+        return toDTO(questionnaire, false, viewerToken, passwordVerified);
+    }
+
+    public boolean verifyAccessPassword(String id, String accessPassword) {
+        Questionnaire questionnaire = questionnaireRepository.findById(id).orElse(null);
+        if (questionnaire == null) {
+            return false;
+        }
+        String storedPassword = questionnaire.getAccessPassword();
+        if (storedPassword == null || storedPassword.trim().isEmpty()) {
+            return true;
+        }
+        return storedPassword.equals(accessPassword);
     }
 
     @Transactional
@@ -104,6 +125,7 @@ public class QuestionnaireService {
         questionnaire.setCreatorToken("ct_" + UUID.randomUUID().toString().replace("-", ""));
         questionnaire.setCreatedAt(LocalDateTime.now());
         questionnaire.setCoverConfig(serializeCoverConfig(dto.getCoverConfig()));
+        questionnaire.setAccessPassword(dto.getAccessPassword());
 
         questionnaire = questionnaireRepository.save(questionnaire);
 
@@ -156,6 +178,9 @@ public class QuestionnaireService {
         }
         if (dto.getCoverConfig() != null) {
             questionnaire.setCoverConfig(serializeCoverConfig(dto.getCoverConfig()));
+        }
+        if (dto.getAccessPassword() != null) {
+            questionnaire.setAccessPassword(dto.getAccessPassword().trim().isEmpty() ? null : dto.getAccessPassword());
         }
 
         questionnaire = questionnaireRepository.save(questionnaire);
@@ -265,6 +290,17 @@ public class QuestionnaireService {
         Questionnaire questionnaire = questionnaireRepository.findById(id).orElse(null);
         if (questionnaire == null) {
             return SubmitResult.fail(SubmitResult.ERROR_NOT_FOUND, "问卷不存在");
+        }
+
+        String storedPassword = questionnaire.getAccessPassword();
+        boolean hasPassword = storedPassword != null && !storedPassword.trim().isEmpty();
+        if (hasPassword) {
+            if (request.getAccessPassword() == null || request.getAccessPassword().isEmpty()) {
+                return SubmitResult.fail(SubmitResult.ERROR_PASSWORD_REQUIRED, "请输入访问口令");
+            }
+            if (!storedPassword.equals(request.getAccessPassword())) {
+                return SubmitResult.fail(SubmitResult.ERROR_PASSWORD_INVALID, "访问口令错误");
+            }
         }
 
         if (!"active".equals(questionnaire.getStatus())) {
@@ -547,14 +583,18 @@ public class QuestionnaireService {
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire) {
-        return toDTO(questionnaire, false, null);
+        return toDTO(questionnaire, false, null, true);
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken) {
-        return toDTO(questionnaire, includeCreatorToken, null);
+        return toDTO(questionnaire, includeCreatorToken, null, true);
     }
 
     private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken, String viewerToken) {
+        return toDTO(questionnaire, includeCreatorToken, viewerToken, true);
+    }
+
+    private QuestionnaireDTO toDTO(Questionnaire questionnaire, boolean includeCreatorToken, String viewerToken, boolean passwordVerified) {
         QuestionnaireDTO dto = new QuestionnaireDTO();
         dto.setId(questionnaire.getId());
         dto.setTitle(questionnaire.getTitle());
@@ -567,6 +607,13 @@ public class QuestionnaireService {
         }
         dto.setCreatedAt(questionnaire.getCreatedAt());
 
+        boolean hasPassword = questionnaire.getAccessPassword() != null && !questionnaire.getAccessPassword().trim().isEmpty();
+        boolean isCreator = viewerToken != null && viewerToken.equals(questionnaire.getCreatorToken());
+        dto.setPasswordProtected(hasPassword);
+        if (isCreator) {
+            dto.setAccessPassword(questionnaire.getAccessPassword());
+        }
+
         boolean resultsVisible = isStatisticsVisible(questionnaire, viewerToken);
         if (resultsVisible) {
             Integer responseCount = questionnaireRepository.countResponsesByQuestionnaireId(questionnaire.getId());
@@ -576,24 +623,26 @@ public class QuestionnaireService {
         }
 
         List<QuestionDTO> questionDTOs = new ArrayList<>();
-        for (Question question : questionnaire.getQuestions()) {
-            QuestionDTO qdto = new QuestionDTO();
-            qdto.setId(question.getId());
-            qdto.setType(question.getType());
-            qdto.setContent(question.getContent());
-            qdto.setOrderIndex(question.getOrderIndex());
-            qdto.setRequired(question.getRequired());
+        if (passwordVerified) {
+            for (Question question : questionnaire.getQuestions()) {
+                QuestionDTO qdto = new QuestionDTO();
+                qdto.setId(question.getId());
+                qdto.setType(question.getType());
+                qdto.setContent(question.getContent());
+                qdto.setOrderIndex(question.getOrderIndex());
+                qdto.setRequired(question.getRequired());
 
-            List<OptionDTO> optionDTOs = new ArrayList<>();
-            for (OptionItem option : question.getOptions()) {
-                OptionDTO odto = new OptionDTO();
-                odto.setId(option.getId());
-                odto.setContent(option.getContent());
-                odto.setOrderIndex(option.getOrderIndex());
-                optionDTOs.add(odto);
+                List<OptionDTO> optionDTOs = new ArrayList<>();
+                for (OptionItem option : question.getOptions()) {
+                    OptionDTO odto = new OptionDTO();
+                    odto.setId(option.getId());
+                    odto.setContent(option.getContent());
+                    odto.setOrderIndex(option.getOrderIndex());
+                    optionDTOs.add(odto);
+                }
+                qdto.setOptions(optionDTOs);
+                questionDTOs.add(qdto);
             }
-            qdto.setOptions(optionDTOs);
-            questionDTOs.add(qdto);
         }
         dto.setQuestions(questionDTOs);
         dto.setCoverConfig(deserializeCoverConfig(questionnaire.getCoverConfig()));

@@ -18,4 +18,6 @@ public class QuestionnaireDTO {
     private List<QuestionDTO> questions;
     private Integer responseCount;
     private Map<String, Object> coverConfig;
+    private Boolean passwordProtected;
+    private String accessPassword;
 }

@@ -60,6 +60,8 @@ export interface Questionnaire {
   questions: Question[]
   responseCount?: number
   coverConfig?: CoverConfig
+  passwordProtected?: boolean
+  accessPassword?: string
 }
 
 export interface Answer {
@@ -72,6 +74,7 @@ export interface SubmitRequest {
   answers: Answer[]
   submitDurationSeconds?: number
   userAgent?: string
+  accessPassword?: string
 }
 
 export interface Fingerprint {

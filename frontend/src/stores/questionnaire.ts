@@ -28,12 +28,12 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
   }
 
   // 获取单个问卷
-  async function fetchQuestionnaire(id: string) {
+  async function fetchQuestionnaire(id: string, accessPassword?: string) {
     loading.value = true
     error.value = null
     try {
       const viewerToken = api.getCreatorToken(id) || undefined
-      currentQuestionnaire.value = await api.getQuestionnaire(id, viewerToken)
+      currentQuestionnaire.value = await api.getQuestionnaire(id, viewerToken, accessPassword)
     } catch (e) {
       error.value = '获取问卷详情失败'
       console.error(e)
@@ -115,7 +115,8 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
   async function submitQuestionnaire(
     id: string,
     answers: Array<{ questionId: string; value: string | string[] }>,
-    submitDurationSeconds?: number
+    submitDurationSeconds?: number,
+    accessPassword?: string
   ): Promise<boolean> {
     loading.value = true
     error.value = null
@@ -124,7 +125,8 @@ export const useQuestionnaireStore = defineStore('questionnaire', () => {
         respondentId: api.getRespondentId(),
         answers,
         submitDurationSeconds,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        accessPassword
       })
       return success
     } catch (e) {

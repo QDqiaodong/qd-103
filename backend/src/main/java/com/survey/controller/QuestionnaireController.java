@@ -32,12 +32,22 @@ public class QuestionnaireController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<QuestionnaireDTO>> getById(
             @PathVariable String id,
-            @RequestParam(required = false) String viewerToken) {
-        QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(id, viewerToken);
+            @RequestParam(required = false) String viewerToken,
+            @RequestParam(required = false) String accessPassword) {
+        QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(id, viewerToken, accessPassword);
         if (questionnaire == null) {
             return ResponseEntity.ok(ApiResponse.error("问卷不存在"));
         }
         return ResponseEntity.ok(ApiResponse.success(questionnaire));
+    }
+
+    @PostMapping("/{id}/verify-password")
+    public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        String password = body.get("password");
+        boolean valid = questionnaireService.verifyAccessPassword(id, password);
+        return ResponseEntity.ok(ApiResponse.success(valid));
     }
 
     @PostMapping

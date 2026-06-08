@@ -211,6 +211,13 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
                 {{ getThemeLabel(q) }}
               </span>
               <span
+                v-if="q.passwordProtected"
+                class="password-badge"
+                title="口令访问"
+              >
+                🔒 口令
+              </span>
+              <span
                 class="visibility-badge"
                 :style="{ background: getVisibilityInfo(q).color + '15', color: getVisibilityInfo(q).color }"
                 :title="getVisibilityInfo(q).label"
@@ -448,6 +455,19 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
 
 .visibility-badge .visibility-icon {
   font-size: 12px;
+}
+
+.password-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366F1;
 }
 
 .card-title {
