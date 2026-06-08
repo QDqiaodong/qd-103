@@ -269,6 +269,10 @@ function getVisibilityLabel(visibility?: ResultVisibility): string {
 function goToEdit() {
   router.push(`/edit/${questionnaireId.value}`)
 }
+
+function goToShare() {
+  router.push(`/share/${questionnaireId.value}`)
+}
 </script>
 
 <template>
@@ -283,6 +287,9 @@ function goToEdit() {
             </button>
             <button class="btn btn-outline" @click="goToFingerprint">
               指纹档案
+            </button>
+            <button class="btn btn-outline" @click="goToShare">
+              分享结果
             </button>
             <button class="btn btn-primary" @click="exportData">
               导出数据

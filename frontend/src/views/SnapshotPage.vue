@@ -153,6 +153,12 @@ function goToQuestionnaire() {
     router.push(`/edit/${snapshot.value.questionnaireId}`)
   }
 }
+
+function goToShare() {
+  if (snapshot.value) {
+    router.push(`/share/snapshot/${snapshot.value.id}`)
+  }
+}
 </script>
 
 <template>
@@ -169,6 +175,9 @@ function goToQuestionnaire() {
           <div class="header-actions">
             <button class="btn btn-outline" @click="goBack">
               返回
+            </button>
+            <button class="btn btn-outline" @click="goToShare">
+              分享结果
             </button>
             <button class="btn btn-outline" @click="goToQuestionnaire">
               查看原问卷

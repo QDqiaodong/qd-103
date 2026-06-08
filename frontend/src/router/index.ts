@@ -42,6 +42,16 @@ const router = createRouter({
       path: '/snapshot/:id',
       name: 'snapshot',
       component: () => import('../views/SnapshotPage.vue')
+    },
+    {
+      path: '/share/:id',
+      name: 'share',
+      component: () => import('../views/SharePage.vue')
+    },
+    {
+      path: '/share/snapshot/:id',
+      name: 'share-snapshot',
+      component: () => import('../views/SharePage.vue')
     }
   ]
 })
