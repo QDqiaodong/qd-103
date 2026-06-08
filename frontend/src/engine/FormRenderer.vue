@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Question } from '../types'
+import { getVisibleQuestions } from '../lib/utils'
 import SingleChoice from './questions/SingleChoice.vue'
 import MultipleChoice from './questions/MultipleChoice.vue'
 import TextQuestion from './questions/TextQuestion.vue'
 
-defineProps<{
+const props = defineProps<{
   questions: Question[]
   answers: Record<string, string | string[]>
 }>()
@@ -12,6 +14,10 @@ defineProps<{
 const emit = defineEmits<{
   answer: [questionId: string, value: string | string[]]
 }>()
+
+const visibleQuestions = computed(() => {
+  return getVisibleQuestions(props.questions, props.answers)
+})
 
 function handleAnswer(questionId: string, value: string | string[]) {
   emit('answer', questionId, value)
@@ -21,7 +27,7 @@ function handleAnswer(questionId: string, value: string | string[]) {
 <template>
   <div class="form-renderer">
     <div
-      v-for="(question, index) in questions"
+      v-for="(question, index) in visibleQuestions"
       :key="question.id"
       :id="`question-${question.id}`"
       :data-question-id="question.id"

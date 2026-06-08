@@ -68,6 +68,7 @@ public class SnapshotService {
             qdto.setContent(question.getContent());
             qdto.setOrderIndex(question.getOrderIndex());
             qdto.setRequired(question.getRequired());
+            qdto.setShowCondition(question.getShowCondition());
 
             List<OptionDTO> optionDTOs = new ArrayList<>();
             for (OptionItem option : question.getOptions()) {
@@ -75,6 +76,8 @@ public class SnapshotService {
                 odto.setId(option.getId());
                 odto.setContent(option.getContent());
                 odto.setOrderIndex(option.getOrderIndex());
+                odto.setTerminateSurvey(option.getTerminateSurvey());
+                odto.setTerminateMessage(option.getTerminateMessage());
                 optionDTOs.add(odto);
             }
             qdto.setOptions(optionDTOs);

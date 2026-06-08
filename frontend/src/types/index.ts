@@ -36,6 +36,13 @@ export interface QuestionOption {
   id: string
   content: string
   orderIndex: number
+  terminateSurvey?: boolean
+  terminateMessage?: string
+}
+
+export interface ShowCondition {
+  dependOnQuestionId: string
+  optionIds: string[]
 }
 
 export interface Question {
@@ -46,6 +53,7 @@ export interface Question {
   orderIndex: number
   options?: QuestionOption[]
   required?: boolean
+  showCondition?: string | null
 }
 
 export interface Questionnaire {

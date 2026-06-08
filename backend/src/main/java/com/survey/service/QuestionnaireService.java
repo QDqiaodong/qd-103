@@ -185,6 +185,7 @@ public class QuestionnaireService {
                 question.setContent(qdto.getContent());
                 question.setOrderIndex(qdto.getOrderIndex());
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
+                question.setShowCondition(qdto.getShowCondition());
 
                 if (qdto.getOptions() != null) {
                     for (OptionDTO odto : qdto.getOptions()) {
@@ -193,6 +194,8 @@ public class QuestionnaireService {
                         option.setQuestion(question);
                         option.setContent(odto.getContent());
                         option.setOrderIndex(odto.getOrderIndex());
+                        option.setTerminateSurvey(odto.getTerminateSurvey() != null ? odto.getTerminateSurvey() : false);
+                        option.setTerminateMessage(odto.getTerminateMessage());
                         question.getOptions().add(option);
                     }
                 }
@@ -274,6 +277,7 @@ public class QuestionnaireService {
                 question.setContent(qdto.getContent());
                 question.setOrderIndex(qdto.getOrderIndex());
                 question.setRequired(qdto.getRequired() != null ? qdto.getRequired() : true);
+                question.setShowCondition(qdto.getShowCondition());
 
                 if (!isNewQuestion && oldType != null && !oldType.equals(qdto.getType())) {
                     answerRepository.deleteByQuestionId(question.getId());
@@ -303,6 +307,8 @@ public class QuestionnaireService {
                         }
                         option.setContent(odto.getContent());
                         option.setOrderIndex(odto.getOrderIndex());
+                        option.setTerminateSurvey(odto.getTerminateSurvey() != null ? odto.getTerminateSurvey() : false);
+                        option.setTerminateMessage(odto.getTerminateMessage());
                         updatedOptions.add(option);
                     }
                     question.getOptions().clear();
@@ -701,6 +707,7 @@ public class QuestionnaireService {
                 qdto.setContent(question.getContent());
                 qdto.setOrderIndex(question.getOrderIndex());
                 qdto.setRequired(question.getRequired());
+                qdto.setShowCondition(question.getShowCondition());
 
                 List<OptionDTO> optionDTOs = new ArrayList<>();
                 for (OptionItem option : question.getOptions()) {
@@ -708,6 +715,8 @@ public class QuestionnaireService {
                     odto.setId(option.getId());
                     odto.setContent(option.getContent());
                     odto.setOrderIndex(option.getOrderIndex());
+                    odto.setTerminateSurvey(option.getTerminateSurvey());
+                    odto.setTerminateMessage(option.getTerminateMessage());
                     optionDTOs.add(odto);
                 }
                 qdto.setOptions(optionDTOs);

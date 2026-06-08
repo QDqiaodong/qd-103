@@ -24,4 +24,9 @@ public class OptionItem {
 
     @Column(name = "order_index", nullable = false)
     private Integer orderIndex;
+
+    private Boolean terminateSurvey = false;
+
+    @Column(length = 500)
+    private String terminateMessage;
 }

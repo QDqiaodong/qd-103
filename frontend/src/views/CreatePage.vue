@@ -29,12 +29,13 @@ function addQuestion(type: QuestionType) {
     type,
     content: '',
     orderIndex: questions.value.length,
-    required: true
+    required: true,
+    showCondition: null
   }
   if (type !== 'text') {
     question.options = [
-      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项1', orderIndex: 0 },
-      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项2', orderIndex: 1 }
+      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项1', orderIndex: 0, terminateSurvey: false, terminateMessage: '' },
+      { id: 'o_' + Math.random().toString(36).substring(2), content: '选项2', orderIndex: 1, terminateSurvey: false, terminateMessage: '' }
     ]
   }
   questions.value.push(question)
@@ -45,9 +46,18 @@ function updateQuestion(index: number, data: Partial<Question>) {
 }
 
 function deleteQuestion(index: number) {
+  const deletedId = questions.value[index].id
   questions.value.splice(index, 1)
   questions.value.forEach((q, i) => {
     q.orderIndex = i
+    if (q.showCondition) {
+      try {
+        const cond = JSON.parse(q.showCondition)
+        if (cond.dependOnQuestionId === deletedId) {
+          q.showCondition = null
+        }
+      } catch {}
+    }
   })
 }
 
@@ -232,6 +242,7 @@ async function saveQuestionnaire() {
               :question="question"
               :index="index"
               :total="questions.length"
+              :all-questions="questions"
               @update="(data) => updateQuestion(index, data)"
               @delete="deleteQuestion(index)"
               @move="(dir) => moveQuestion(index, dir)"

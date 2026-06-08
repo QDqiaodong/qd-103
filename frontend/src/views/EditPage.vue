@@ -160,9 +160,18 @@ function updateQuestion(index: number, data: any) {
 }
 
 function deleteQuestion(index: number) {
+  const deletedId = questions.value[index].id
   questions.value.splice(index, 1)
   questions.value.forEach((q, i) => {
     q.orderIndex = i
+    if (q.showCondition) {
+      try {
+        const cond = JSON.parse(q.showCondition)
+        if (cond.dependOnQuestionId === deletedId) {
+          q.showCondition = null
+        }
+      } catch {}
+    }
   })
 }
 
@@ -178,7 +187,8 @@ function cloneQuestion(index: number) {
   const original = questions.value[index]
   const cloned: (typeof questions.value)[0] = {
     ...JSON.parse(JSON.stringify(original)),
-    id: 'q_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
+    id: 'q_' + Math.random().toString(36).substring(2) + Date.now().toString(36),
+    showCondition: null
   }
   
   if (cloned.options) {
@@ -460,6 +470,7 @@ function copyLink() {
                 :question="question"
                 :index="index"
                 :total="questions.length"
+                :all-questions="questions"
                 @update="(data) => updateQuestion(index, data)"
                 @delete="deleteQuestion(index)"
                 @move="(dir) => moveQuestion(index, dir)"

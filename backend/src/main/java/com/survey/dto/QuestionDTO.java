@@ -11,4 +11,5 @@ public class QuestionDTO {
     private Integer orderIndex;
     private Boolean required;
     private List<OptionDTO> options;
+    private String showCondition;
 }

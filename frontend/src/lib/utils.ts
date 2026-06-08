@@ -1,9 +1,87 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { Questionnaire } from '../types'
+import type { Questionnaire, Question, ShowCondition } from '../types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+export interface TerminateInfo {
+  terminated: boolean
+  message: string
+}
+
+export function parseShowCondition(conditionStr: string | null | undefined): ShowCondition | null {
+  if (!conditionStr) return null
+  try {
+    return JSON.parse(conditionStr)
+  } catch {
+    return null
+  }
+}
+
+export function isQuestionVisible(
+  question: Question,
+  questions: Question[],
+  answers: Record<string, string | string[]>
+): boolean {
+  const condition = parseShowCondition(question.showCondition)
+  if (!condition) return true
+
+  const dependOnQuestion = questions.find(q => q.id === condition.dependOnQuestionId)
+  if (!dependOnQuestion) return true
+
+  const answer = answers[condition.dependOnQuestionId]
+  if (!answer) return false
+
+  if (Array.isArray(answer)) {
+    return answer.some(a => condition.optionIds.includes(a))
+  } else {
+    return condition.optionIds.includes(answer)
+  }
+}
+
+export function getVisibleQuestions(
+  questions: Question[],
+  answers: Record<string, string | string[]>
+): Question[] {
+  return questions.filter(q => isQuestionVisible(q, questions, answers))
+}
+
+export function getTerminateInfo(
+  questions: Question[],
+  answers: Record<string, string | string[]>
+): TerminateInfo {
+  for (const question of questions) {
+    if (question.type === 'text') continue
+    if (!question.options?.length) continue
+
+    const answer = answers[question.id]
+    if (!answer) continue
+
+    const selectedOptionIds = Array.isArray(answer) ? answer : [answer]
+
+    for (const optionId of selectedOptionIds) {
+      const option = question.options.find(o => o.id === optionId)
+      if (option?.terminateSurvey) {
+        return {
+          terminated: true,
+          message: option.terminateMessage || ''
+        }
+      }
+    }
+  }
+
+  return { terminated: false, message: '' }
+}
+
+export function getQuestionVisibleIndex(
+  questionId: string,
+  questions: Question[],
+  answers: Record<string, string | string[]>
+): number {
+  const visible = getVisibleQuestions(questions, answers)
+  return visible.findIndex(q => q.id === questionId)
 }
 
 export function getDeadlineInfo(q: Questionnaire): { daysLeft: number | null; hoursLeft: number | null; urgency: 'critical' | 'warning' | 'normal' | 'none'; label: string } {

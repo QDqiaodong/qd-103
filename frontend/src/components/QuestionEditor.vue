@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { Question, QuestionOption } from '../types'
-import { ChevronUp, ChevronDown, Trash2, GripVertical, Copy } from 'lucide-vue-next'
+import { ref, watch, computed } from 'vue'
+import type { Question, QuestionOption, ShowCondition } from '../types'
+import { ChevronUp, ChevronDown, Trash2, GripVertical, Copy, GitBranch } from 'lucide-vue-next'
 
 const props = defineProps<{
   question: Question
   index: number
   total: number
+  allQuestions: Question[]
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 
 const localContent = ref(props.question.content)
 const localOptions = ref<QuestionOption[]>(props.question.options || [])
+const showLogicPanel = ref(false)
 
 watch(() => props.question, (newQ) => {
   localContent.value = newQ.content
@@ -40,7 +42,9 @@ function addOption() {
   localOptions.value.push({
     id: 'o_' + Math.random().toString(36).substring(2),
     content: `选项${localOptions.value.length + 1}`,
-    orderIndex: localOptions.value.length
+    orderIndex: localOptions.value.length,
+    terminateSurvey: false,
+    terminateMessage: ''
   })
 }
 
@@ -55,6 +59,64 @@ function removeOption(index: number) {
 function toggleRequired() {
   emit('update', { required: !props.question.required })
 }
+
+function toggleOptionTerminate(index: number) {
+  const opt = localOptions.value[index]
+  opt.terminateSurvey = !opt.terminateSurvey
+  if (!opt.terminateSurvey) {
+    opt.terminateMessage = ''
+  }
+}
+
+function updateTerminateMessage(index: number, message: string) {
+  localOptions.value[index].terminateMessage = message
+}
+
+const previousQuestions = computed(() => {
+  return props.allQuestions.filter((q, i) => i < props.index && q.type !== 'text')
+})
+
+const showConditionObj = computed<ShowCondition | null>(() => {
+  if (!props.question.showCondition) return null
+  try {
+    return JSON.parse(props.question.showCondition)
+  } catch {
+    return null
+  }
+})
+
+const dependOnQuestion = computed(() => {
+  if (!showConditionObj.value) return null
+  return props.allQuestions.find(q => q.id === showConditionObj.value!.dependOnQuestionId) || null
+})
+
+function setShowCondition(questionId: string | null) {
+  if (!questionId) {
+    emit('update', { showCondition: null })
+    return
+  }
+  const condition: ShowCondition = {
+    dependOnQuestionId: questionId,
+    optionIds: []
+  }
+  emit('update', { showCondition: JSON.stringify(condition) })
+}
+
+function toggleOptionInCondition(optionId: string) {
+  if (!showConditionObj.value) return
+  const condition = { ...showConditionObj.value }
+  const idx = condition.optionIds.indexOf(optionId)
+  if (idx === -1) {
+    condition.optionIds.push(optionId)
+  } else {
+    condition.optionIds.splice(idx, 1)
+  }
+  emit('update', { showCondition: JSON.stringify(condition) })
+}
+
+function clearShowCondition() {
+  emit('update', { showCondition: null })
+}
 </script>
 
 <template>
@@ -65,6 +127,10 @@ function toggleRequired() {
         <span>{{ index + 1 }}.</span>
         <span class="question-type-badge">
           {{ question.type === 'single' ? '单选' : question.type === 'multiple' ? '多选' : '填空' }}
+        </span>
+        <span v-if="question.showCondition" class="logic-badge">
+          <GitBranch :size="12" />
+          条件显示
         </span>
       </div>
       <div class="question-actions">
@@ -137,6 +203,109 @@ function toggleRequired() {
           />
           <span>必填</span>
         </label>
+        <button class="logic-toggle-btn" @click="showLogicPanel = !showLogicPanel">
+          <GitBranch :size="14" />
+          分支逻辑
+          <ChevronDown :size="14" :class="{ 'rotated': showLogicPanel }" />
+        </button>
+      </div>
+
+      <div v-if="showLogicPanel" class="logic-panel">
+        <div class="logic-section">
+          <h4 class="logic-section-title">📌 显示条件</h4>
+          <p class="logic-section-desc">
+            设置本题的显示条件，只有当前面的题目选中指定选项时，本题才会显示给答题者。
+          </p>
+
+          <div v-if="previousQuestions.length === 0" class="logic-empty">
+            暂无可依赖的前置题目（前面需要有选择题）
+          </div>
+
+          <div v-else class="logic-form">
+            <div class="form-group">
+              <label class="form-label">依赖题目</label>
+              <select
+                :value="showConditionObj?.dependOnQuestionId || ''"
+                class="form-input"
+                @change="setShowCondition(($event.target as HTMLSelectElement).value || null)"
+              >
+                <option value="">不设置条件（始终显示）</option>
+                <option
+                  v-for="q in previousQuestions"
+                  :key="q.id"
+                  :value="q.id"
+                >
+                  第 {{ allQuestions.indexOf(q) + 1 }} 题：{{ q.content || '未命名题目' }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="dependOnQuestion && dependOnQuestion.options?.length" class="form-group">
+              <label class="form-label">选中以下哪些选项时显示本题</label>
+              <div class="option-check-list">
+                <label
+                  v-for="opt in dependOnQuestion.options"
+                  :key="opt.id"
+                  class="option-check-item"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="showConditionObj?.optionIds.includes(opt.id)"
+                    @change="toggleOptionInCondition(opt.id)"
+                  />
+                  <span>{{ opt.content }}</span>
+                </label>
+              </div>
+              <p v-if="!showConditionObj?.optionIds.length" class="logic-hint">
+                ⚠️ 请至少选择一个选项作为触发条件
+              </p>
+              <button
+                v-if="showConditionObj"
+                class="btn btn-outline btn-small clear-btn"
+                @click="clearShowCondition"
+              >
+                清除条件
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="question.type !== 'text'" class="logic-section">
+          <h4 class="logic-section-title">⏹️ 提前结束</h4>
+          <p class="logic-section-desc">
+            当答题者选中某个选项时，直接结束问卷，后续题目不再显示。适用于报名筛选、资格判定等场景。
+          </p>
+
+          <div class="terminate-options">
+            <div
+              v-for="(option, optIndex) in localOptions"
+              :key="option.id"
+              class="terminate-option-item"
+              :class="{ active: option.terminateSurvey }"
+            >
+              <label class="terminate-toggle">
+                <input
+                  type="checkbox"
+                  :checked="option.terminateSurvey"
+                  @change="toggleOptionTerminate(optIndex)"
+                />
+                <span class="terminate-label">
+                  选中「{{ option.content || '选项' + (optIndex + 1) }}」后结束问卷
+                </span>
+              </label>
+              <div v-if="option.terminateSurvey" class="terminate-message-input">
+                <label class="form-label">结束说明（可选）</label>
+                <input
+                  :value="option.terminateMessage"
+                  type="text"
+                  class="form-input"
+                  placeholder="结束时显示给用户的文字"
+                  @input="updateTerminateMessage(optIndex, ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -162,6 +331,7 @@ function toggleRequired() {
   align-items: center;
   gap: 8px;
   font-weight: 500;
+  flex-wrap: wrap;
 }
 
 .grip-icon {
@@ -176,6 +346,18 @@ function toggleRequired() {
   color: white;
   border-radius: 4px;
   font-weight: normal;
+}
+
+.logic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #FEF3C7;
+  color: #D97706;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .question-actions {
@@ -261,7 +443,10 @@ function toggleRequired() {
 
 .question-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
 }
 
 .required-toggle {
@@ -275,5 +460,188 @@ function toggleRequired() {
 
 .required-toggle input {
   cursor: pointer;
+}
+
+.logic-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--color-primary);
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logic-toggle-btn:hover {
+  background: #DBEAFE;
+}
+
+.logic-toggle-btn .rotated {
+  transform: rotate(180deg);
+  transition: transform 0.2s;
+}
+
+.logic-panel {
+  margin-top: 12px;
+  padding: 16px;
+  background: #FAFAFA;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+}
+
+.logic-section {
+  margin-bottom: 20px;
+}
+
+.logic-section:last-child {
+  margin-bottom: 0;
+}
+
+.logic-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 6px;
+}
+
+.logic-section-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.logic-empty {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.logic-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.form-input {
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+}
+
+.option-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: white;
+  border-radius: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.option-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.option-check-item input {
+  cursor: pointer;
+}
+
+.logic-hint {
+  font-size: 12px;
+  color: #D97706;
+  margin: 6px 0 0;
+}
+
+.clear-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--color-danger);
+  border-color: #FECACA;
+}
+
+.clear-btn:hover {
+  background: #FEE2E2;
+}
+
+.terminate-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.terminate-option-item {
+  padding: 12px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.terminate-option-item.active {
+  border-color: #F87171;
+  background: #FEF2F2;
+}
+
+.terminate-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.terminate-toggle input {
+  cursor: pointer;
+}
+
+.terminate-label {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.terminate-message-input {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 </style>

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQuestionnaireStore } from '../stores/questionnaire'
 import type { Answer, CoverConfig } from '../types'
 import { DEFAULT_COVER_CONFIG } from '../types'
+import { getVisibleQuestions, getTerminateInfo } from '../lib/utils'
 import FormRenderer from '../engine/FormRenderer.vue'
 import QuestionNavigation from '../components/QuestionNavigation.vue'
 import * as api from '../services/api'
@@ -42,7 +43,7 @@ function setStoredPassword(qid: string, password: string) {
 }
 
 const showNavigation = computed(() => {
-  return store.currentQuestionnaire && store.currentQuestionnaire.questions.length >= 5
+  return visibleQuestions.value.length >= 5
 })
 
 function jumpToQuestion(questionId: string) {
@@ -98,9 +99,20 @@ async function verifyPassword() {
   }
 }
 
+const visibleQuestions = computed(() => {
+  if (!store.currentQuestionnaire) return []
+  return getVisibleQuestions(store.currentQuestionnaire.questions, answers.value)
+})
+
+const terminateInfo = computed(() => {
+  if (!store.currentQuestionnaire) return { terminated: false, message: '' }
+  return getTerminateInfo(store.currentQuestionnaire.questions, answers.value)
+})
+
 const canSubmit = computed(() => {
   if (!store.currentQuestionnaire) return false
-  for (const q of store.currentQuestionnaire.questions) {
+  if (terminateInfo.value.terminated) return true
+  for (const q of visibleQuestions.value) {
     if (q.required) {
       const answer = answers.value[q.id]
       if (!answer || (Array.isArray(answer) && answer.length === 0)) {
@@ -253,7 +265,7 @@ function goHome() {
     <div :class="['fill-container', { 'with-nav': showNavigation }]">
       <aside v-if="showNavigation" class="nav-sidebar">
         <QuestionNavigation
-          :questions="store.currentQuestionnaire.questions"
+          :questions="visibleQuestions"
           :answers="answers"
           :accent-color="coverConfig.accentColor"
           @jump="jumpToQuestion"
@@ -352,12 +364,12 @@ function goHome() {
 
         <div class="progress-bar">
           <div class="progress-text">
-            {{ Object.keys(answers).length }} / {{ store.currentQuestionnaire.questions.length }} 题已填写
+            {{ Object.keys(answers).filter(k => answers[k] && (Array.isArray(answers[k]) ? answers[k].length > 0 : true)).length }} / {{ visibleQuestions.length }} 题已填写
           </div>
           <div class="progress-track">
             <div
               class="progress-fill"
-              :style="{ width: `${(Object.keys(answers).length / store.currentQuestionnaire.questions.length) * 100}%` }"
+              :style="{ width: visibleQuestions.length ? `${(Object.keys(answers).filter(k => answers[k] && (Array.isArray(answers[k]) ? answers[k].length > 0 : true)).length / visibleQuestions.length) * 100}%` : '0%' }"
             ></div>
           </div>
         </div>
@@ -367,6 +379,14 @@ function goHome() {
           :answers="answers"
           @answer="handleAnswer"
         />
+
+        <div v-if="terminateInfo.terminated" class="terminate-banner">
+          <div class="terminate-icon">⏹️</div>
+          <div class="terminate-content">
+            <p class="terminate-title">问卷将在此结束</p>
+            <p v-if="terminateInfo.message" class="terminate-message">{{ terminateInfo.message }}</p>
+          </div>
+        </div>
 
         <div v-if="errorMsg" class="error-message">
           {{ errorMsg }}
@@ -378,7 +398,7 @@ function goHome() {
             :disabled="!canSubmit || submitting"
             @click="submitForm"
           >
-            {{ submitting ? '提交中...' : '提交问卷' }}
+            {{ submitting ? '提交中...' : (terminateInfo.terminated ? '提交并结束' : '提交问卷') }}
           </button>
         </div>
       </template>
@@ -776,5 +796,37 @@ function goHome() {
   width: 100%;
   padding: 14px;
   font-size: 16px;
+}
+
+.terminate-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border-bottom: 1px solid #F59E0B;
+}
+
+.terminate-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.terminate-content {
+  flex: 1;
+}
+
+.terminate-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #92400E;
+}
+
+.terminate-message {
+  margin: 0;
+  font-size: 13px;
+  color: #B45309;
+  line-height: 1.5;
 }
 </style>

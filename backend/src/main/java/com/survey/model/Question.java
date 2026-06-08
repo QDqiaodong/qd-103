@@ -32,6 +32,9 @@ public class Question {
 
     private Boolean required = true;
 
+    @Column(columnDefinition = "TEXT")
+    private String showCondition;
+
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
     private List<OptionItem> options = new ArrayList<>();
