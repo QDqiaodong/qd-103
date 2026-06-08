@@ -56,4 +56,10 @@ public class QuestionnaireSnapshot {
 
     @Column(name = "question_count")
     private Integer questionCount;
+
+    @Column(name = "max_responses")
+    private Integer maxResponses;
+
+    @Column(name = "closed_message", columnDefinition = "TEXT")
+    private String closedMessage;
 }

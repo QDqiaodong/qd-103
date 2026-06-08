@@ -195,6 +195,7 @@ public class QuestionnaireController {
                 "inspectTime", result.getInspectTime(),
                 "expiredCount", result.getExpiredCount(),
                 "reactivatedCount", result.getReactivatedCount(),
+                "quotaFullCount", result.getQuotaFullCount(),
                 "totalCorrected", result.getTotalCorrected()
         );
         return ResponseEntity.ok(ApiResponse.success(data));

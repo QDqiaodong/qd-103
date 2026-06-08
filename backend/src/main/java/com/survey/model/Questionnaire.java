@@ -48,6 +48,12 @@ public class Questionnaire {
     @Column(name = "access_password")
     private String accessPassword;
 
+    @Column(name = "max_responses")
+    private Integer maxResponses;
+
+    @Column(name = "closed_message", columnDefinition = "TEXT")
+    private String closedMessage;
+
     @Transient
     private Integer responseCount;
 }

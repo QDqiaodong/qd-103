@@ -62,6 +62,8 @@ export interface Questionnaire {
   coverConfig?: CoverConfig
   passwordProtected?: boolean
   accessPassword?: string
+  maxResponses?: number
+  closedMessage?: string
 }
 
 export interface Answer {
@@ -197,6 +199,8 @@ export interface Snapshot {
   responseCount: number
   questionCount: number
   coverConfig?: CoverConfig
+  maxResponses?: number
+  closedMessage?: string
 }
 
 export interface SnapshotDetail extends Snapshot {

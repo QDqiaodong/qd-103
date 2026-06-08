@@ -20,4 +20,6 @@ public class QuestionnaireDTO {
     private Map<String, Object> coverConfig;
     private Boolean passwordProtected;
     private String accessPassword;
+    private Integer maxResponses;
+    private String closedMessage;
 }

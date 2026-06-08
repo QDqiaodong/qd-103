@@ -32,7 +32,8 @@ function getSnapshotReasonLabel(reason: string): string {
   }
   const reasonMap: Record<string, string> = {
     'closed_closed': '手动关闭封卷',
-    'expired': '到期自动封卷'
+    'expired': '到期自动封卷',
+    'quota_full_closed': '额满自动封卷'
   }
   return reasonMap[reason] || reason
 }
@@ -46,6 +47,9 @@ function getSnapshotReasonClass(reason: string): string {
   }
   if (reason === 'expired' || reason.startsWith('expired')) {
     return 'reason-expired'
+  }
+  if (reason.startsWith('quota_full')) {
+    return 'reason-quota'
   }
   return 'reason-manual'
 }
@@ -436,6 +440,11 @@ function goToQuestionnaire() {
 .reason-manual {
   background: #EFF6FF;
   color: #2563EB;
+}
+
+.reason-quota {
+  background: #ECFDF5;
+  color: #059669;
 }
 
 .header-actions {

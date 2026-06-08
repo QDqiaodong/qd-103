@@ -140,6 +140,21 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
     color: colorMap[visibility] || '#059669'
   }
 }
+
+function getQuotaInfo(q: Questionnaire): { enabled: boolean; progress: number; label: string; nearlyFull: boolean } {
+  if (!q.maxResponses || q.maxResponses <= 0) {
+    return { enabled: false, progress: 0, label: '', nearlyFull: false }
+  }
+  const count = q.responseCount ?? 0
+  const progress = Math.min(100, (count / q.maxResponses) * 100)
+  const nearlyFull = progress >= 80
+  return {
+    enabled: true,
+    progress,
+    label: `${count}/${q.maxResponses}`,
+    nearlyFull
+  }
+}
 </script>
 
 <template>
@@ -218,6 +233,14 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
                 🔒 口令
               </span>
               <span
+                v-if="getQuotaInfo(q).enabled"
+                class="quota-badge"
+                :class="{ 'nearly-full': getQuotaInfo(q).nearlyFull }"
+                title="限额收集"
+              >
+                📦 限额
+              </span>
+              <span
                 class="visibility-badge"
                 :style="{ background: getVisibilityInfo(q).color + '15', color: getVisibilityInfo(q).color }"
                 :title="getVisibilityInfo(q).label"
@@ -257,7 +280,14 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
             </span>
             <span class="meta-item" :class="{ 'count-hidden': q.responseCount === null || q.responseCount === undefined }">
               <template v-if="q.responseCount !== null && q.responseCount !== undefined">
-                {{ q.responseCount }} 人填写
+                <template v-if="getQuotaInfo(q).enabled">
+                  <span :class="{ 'quota-highlight': getQuotaInfo(q).nearlyFull }">
+                    {{ getQuotaInfo(q).label }} 份
+                  </span>
+                </template>
+                <template v-else>
+                  {{ q.responseCount }} 人填写
+                </template>
               </template>
               <template v-else>
                 <span class="count-hidden-text">—</span> 人填写
@@ -468,6 +498,33 @@ function getVisibilityInfo(q: Questionnaire): { label: string; icon: string; col
   white-space: nowrap;
   background: rgba(99, 102, 241, 0.1);
   color: #6366F1;
+}
+
+.quota-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(5, 150, 105, 0.1);
+  color: #059669;
+}
+
+.quota-badge.nearly-full {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+}
+
+.quota-highlight {
+  font-weight: 600;
+  color: #059669;
+}
+
+.quota-highlight.nearly-full {
+  color: #EF4444;
 }
 
 .card-title {

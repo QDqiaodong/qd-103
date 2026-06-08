@@ -15,6 +15,9 @@ const deadline = ref('')
 const questions = ref<Question[]>([])
 const saving = ref(false)
 const selectedTheme = ref<keyof typeof COVER_THEMES>('professional')
+const maxResponsesEnabled = ref(false)
+const maxResponses = ref<number>(100)
+const closedMessage = ref('')
 
 const canSave = computed(() => {
   return title.value.trim() && questions.value.length > 0
@@ -84,7 +87,9 @@ async function saveQuestionnaire() {
         ...q,
         orderIndex: i
       })),
-      coverConfig
+      coverConfig,
+      maxResponses: maxResponsesEnabled.value ? maxResponses.value : undefined,
+      closedMessage: closedMessage.value.trim() || undefined
     }
 
     const result = await store.createQuestionnaire(data)
@@ -150,6 +155,43 @@ async function saveQuestionnaire() {
               type="datetime-local"
               class="form-input"
             />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">最大回收份数</label>
+            <div class="quota-toggle">
+              <label class="toggle-label">
+                <input
+                  type="checkbox"
+                  v-model="maxResponsesEnabled"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-text">启用限额收集</span>
+              </label>
+              <p class="quota-hint">开启后，达到设定份数时问卷将自动停止收集</p>
+            </div>
+
+            <div v-if="maxResponsesEnabled" class="quota-inputs">
+              <div class="form-group">
+                <label class="form-label">最大份数</label>
+                <input
+                  v-model.number="maxResponses"
+                  type="number"
+                  min="1"
+                  class="form-input"
+                  placeholder="请输入最大回收份数"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">封卷说明</label>
+                <textarea
+                  v-model="closedMessage"
+                  class="form-input form-textarea"
+                  placeholder="问卷满额后显示给用户的说明文字（可选）"
+                  rows="3"
+                ></textarea>
+              </div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -304,6 +346,34 @@ async function saveQuestionnaire() {
   font-size: 12px;
   color: var(--color-text-secondary);
   margin-top: 6px;
+}
+
+.quota-toggle {
+  padding: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+}
+
+.quota-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 8px 0 0 26px;
+  line-height: 1.5;
+}
+
+.quota-inputs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.quota-inputs .form-group {
+  margin-bottom: 12px;
+}
+
+.quota-inputs .form-group:last-child {
+  margin-bottom: 0;
 }
 
 .questions-panel {

@@ -116,8 +116,34 @@ const isExpired = computed(() => {
   return new Date(store.currentQuestionnaire.deadline) < new Date()
 })
 
+const isQuotaFull = computed(() => {
+  if (!store.currentQuestionnaire?.maxResponses) return false
+  if (!store.currentQuestionnaire.responseCount) return false
+  return store.currentQuestionnaire.responseCount >= store.currentQuestionnaire.maxResponses
+})
+
+const closedReason = computed(() => {
+  if (!store.currentQuestionnaire) return ''
+  if (store.currentQuestionnaire.status === 'expired' || isExpired.value) {
+    return '该问卷已截止，感谢您的关注。'
+  }
+  if (store.currentQuestionnaire.status === 'closed') {
+    if (store.currentQuestionnaire.closedMessage) {
+      return store.currentQuestionnaire.closedMessage
+    }
+    if (isQuotaFull.value) {
+      return '问卷已达到最大回收份数，感谢您的关注。'
+    }
+    return '该问卷已停止收集，感谢您的关注。'
+  }
+  if (store.currentQuestionnaire.status === 'draft') {
+    return '该问卷尚未发布。'
+  }
+  return '该问卷已停止收集，感谢您的关注。'
+})
+
 const isActive = computed(() => {
-  return store.currentQuestionnaire?.status === 'active' && !isExpired.value
+  return store.currentQuestionnaire?.status === 'active' && !isExpired.value && !isQuotaFull.value
 })
 
 const coverConfig = computed<CoverConfig>(() => {
@@ -252,9 +278,13 @@ function goHome() {
       </div>
 
       <div v-else-if="!isActive" class="error-state">
-        <div class="error-icon">!</div>
-        <h2>问卷已结束</h2>
-        <p>该问卷已停止收集，感谢您的关注。</p>
+        <div class="closed-icon">
+          <span v-if="isQuotaFull">📦</span>
+          <span v-else-if="isExpired">⏰</span>
+          <span v-else>!</span>
+        </div>
+        <h2>{{ isQuotaFull ? '问卷已满额' : (isExpired ? '问卷已截止' : '问卷已结束') }}</h2>
+        <p class="closed-message">{{ closedReason }}</p>
         <button class="btn btn-primary" @click="goHome">返回首页</button>
       </div>
 
@@ -306,6 +336,13 @@ function goHome() {
                 :class="['deadline-info', { 'light-text': isDarkBg }]"
               >
                 截止时间：{{ new Date(store.currentQuestionnaire.deadline).toLocaleString() }}
+              </div>
+
+              <div
+                v-if="store.currentQuestionnaire.maxResponses && store.currentQuestionnaire.responseCount !== null && store.currentQuestionnaire.responseCount !== undefined"
+                :class="['quota-info', { 'light-text': isDarkBg }]"
+              >
+                已回收 {{ store.currentQuestionnaire.responseCount }} / {{ store.currentQuestionnaire.maxResponses }} 份
               </div>
             </div>
           </div>
@@ -509,6 +546,26 @@ function goHome() {
   font-size: 40px;
 }
 
+.closed-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+
+.closed-message {
+  color: var(--color-text-secondary);
+  margin-bottom: 24px;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
 .success-state h2,
 .error-state h2 {
   font-size: 24px;
@@ -649,6 +706,18 @@ function goHome() {
   font-size: 14px;
   margin: 0;
   opacity: 0.7;
+}
+
+.quota-info {
+  font-size: 14px;
+  margin: 0;
+  opacity: 0.8;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  display: inline-block;
+  width: fit-content;
 }
 
 .light-text {

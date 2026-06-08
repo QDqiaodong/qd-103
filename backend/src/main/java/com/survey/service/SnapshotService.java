@@ -96,6 +96,8 @@ public class SnapshotService {
 
         snapshot.setResponseCount(statistics.getTotalResponses());
         snapshot.setQuestionCount(questionnaire.getQuestions().size());
+        snapshot.setMaxResponses(questionnaire.getMaxResponses());
+        snapshot.setClosedMessage(questionnaire.getClosedMessage());
 
         return snapshotRepository.save(snapshot);
     }
@@ -266,6 +268,8 @@ public class SnapshotService {
         dto.setResponseCount(snapshot.getResponseCount());
         dto.setQuestionCount(snapshot.getQuestionCount());
         dto.setCoverConfig(deserializeCoverConfig(snapshot.getCoverConfig()));
+        dto.setMaxResponses(snapshot.getMaxResponses());
+        dto.setClosedMessage(snapshot.getClosedMessage());
         return dto;
     }
 
@@ -284,6 +288,8 @@ public class SnapshotService {
         dto.setResponseCount(snapshot.getResponseCount());
         dto.setQuestionCount(snapshot.getQuestionCount());
         dto.setCoverConfig(deserializeCoverConfig(snapshot.getCoverConfig()));
+        dto.setMaxResponses(snapshot.getMaxResponses());
+        dto.setClosedMessage(snapshot.getClosedMessage());
 
         try {
             List<QuestionDTO> questions = objectMapper.readValue(

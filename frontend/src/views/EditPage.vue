@@ -25,6 +25,9 @@ const coverConfig = ref<CoverConfig>({ ...DEFAULT_COVER_CONFIG })
 const passwordEnabled = ref(false)
 const accessPassword = ref('')
 const confirmPassword = ref('')
+const maxResponsesEnabled = ref(false)
+const maxResponses = ref<number>(100)
+const closedMessage = ref('')
 
 const snapshots = ref<Snapshot[]>([])
 const snapshotsLoading = ref(false)
@@ -52,6 +55,9 @@ onMounted(async () => {
     passwordEnabled.value = !!store.currentQuestionnaire.accessPassword
     accessPassword.value = store.currentQuestionnaire.accessPassword || ''
     confirmPassword.value = store.currentQuestionnaire.accessPassword || ''
+    maxResponsesEnabled.value = !!store.currentQuestionnaire.maxResponses
+    maxResponses.value = store.currentQuestionnaire.maxResponses || 100
+    closedMessage.value = store.currentQuestionnaire.closedMessage || ''
   }
   await loadSnapshots()
 })
@@ -95,7 +101,8 @@ function getSnapshotReasonLabel(reason: string): string {
   }
   const reasonMap: Record<string, string> = {
     'closed_closed': '手动关闭封卷',
-    'expired': '到期自动封卷'
+    'expired': '到期自动封卷',
+    'quota_full_closed': '额满自动封卷'
   }
   return reasonMap[reason] || reason
 }
@@ -109,6 +116,9 @@ function getSnapshotReasonClass(reason: string): string {
   }
   if (reason === 'expired' || reason.startsWith('expired')) {
     return 'reason-expired'
+  }
+  if (reason.startsWith('quota_full')) {
+    return 'reason-quota'
   }
   return 'reason-manual'
 }
@@ -209,7 +219,9 @@ async function saveQuestionnaire() {
       resultVisibility: resultVisibility.value,
       questions: questions.value,
       coverConfig: coverConfig.value,
-      accessPassword: passwordEnabled.value ? accessPassword.value.trim() : ''
+      accessPassword: passwordEnabled.value ? accessPassword.value.trim() : '',
+      maxResponses: maxResponsesEnabled.value ? maxResponses.value : 0,
+      closedMessage: closedMessage.value.trim()
     }
 
     const result = await store.updateQuestionnaire(questionnaireId.value, data)
@@ -364,6 +376,43 @@ function copyLink() {
                   placeholder="请再次输入口令"
                   maxlength="20"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">最大回收份数</label>
+            <div class="quota-toggle">
+              <label class="toggle-label">
+                <input
+                  type="checkbox"
+                  v-model="maxResponsesEnabled"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-text">启用限额收集</span>
+              </label>
+              <p class="quota-hint">开启后，达到设定份数时问卷将自动停止收集并封卷</p>
+            </div>
+
+            <div v-if="maxResponsesEnabled" class="quota-inputs">
+              <div class="form-group">
+                <label class="form-label">最大份数</label>
+                <input
+                  v-model.number="maxResponses"
+                  type="number"
+                  min="1"
+                  class="form-input"
+                  placeholder="请输入最大回收份数"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">封卷说明</label>
+                <textarea
+                  v-model="closedMessage"
+                  class="form-input form-textarea"
+                  placeholder="问卷满额后显示给用户的说明文字（可选）"
+                  rows="3"
+                ></textarea>
               </div>
             </div>
           </div>
@@ -806,6 +855,11 @@ function copyLink() {
   color: #2563EB;
 }
 
+.reason-quota {
+  background: #ECFDF5;
+  color: #059669;
+}
+
 .snapshot-item-meta {
   display: flex;
   gap: 20px;
@@ -926,6 +980,34 @@ function copyLink() {
 }
 
 .password-inputs .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.quota-toggle {
+  padding: 12px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+}
+
+.quota-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 8px 0 0 26px;
+  line-height: 1.5;
+}
+
+.quota-inputs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.quota-inputs .form-group {
+  margin-bottom: 12px;
+}
+
+.quota-inputs .form-group:last-child {
   margin-bottom: 0;
 }
 

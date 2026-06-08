@@ -11,4 +11,6 @@ public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, 
     List<SurveyResponse> findByQuestionnaireId(String questionnaireId);
 
     boolean existsByQuestionnaireIdAndRespondentId(String questionnaireId, String respondentId);
+
+    int countByQuestionnaireId(String questionnaireId);
 }

@@ -35,10 +35,15 @@ public class QuestionnaireService {
 
         LocalDateTime now = LocalDateTime.now();
         for (Questionnaire q : questionnaires) {
-            if ("active".equals(q.getStatus())
-                    && q.getDeadline() != null
-                    && q.getDeadline().isBefore(now)) {
-                processExpiredQuestionnaire(q.getId());
+            if ("active".equals(q.getStatus())) {
+                if (q.getDeadline() != null && q.getDeadline().isBefore(now)) {
+                    processExpiredQuestionnaire(q.getId());
+                } else if (q.getMaxResponses() != null && q.getMaxResponses() > 0) {
+                    int count = responseRepository.countByQuestionnaireId(q.getId());
+                    if (count >= q.getMaxResponses()) {
+                        processQuotaFullQuestionnaire(q.getId());
+                    }
+                }
             }
         }
 
@@ -64,11 +69,17 @@ public class QuestionnaireService {
             return null;
         }
 
-        if ("active".equals(questionnaire.getStatus())
-                && questionnaire.getDeadline() != null
-                && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
-            processExpiredQuestionnaire(id);
-            questionnaire = questionnaireRepository.findByIdWithQuestions(id);
+        if ("active".equals(questionnaire.getStatus())) {
+            if (questionnaire.getDeadline() != null && questionnaire.getDeadline().isBefore(LocalDateTime.now())) {
+                processExpiredQuestionnaire(id);
+                questionnaire = questionnaireRepository.findByIdWithQuestions(id);
+            } else if (questionnaire.getMaxResponses() != null && questionnaire.getMaxResponses() > 0) {
+                int count = responseRepository.countByQuestionnaireId(id);
+                if (count >= questionnaire.getMaxResponses()) {
+                    processQuotaFullQuestionnaire(id);
+                    questionnaire = questionnaireRepository.findByIdWithQuestions(id);
+                }
+            }
         }
 
         boolean isCreator = viewerToken != null && viewerToken.equals(questionnaire.getCreatorToken());
@@ -113,6 +124,40 @@ public class QuestionnaireService {
         snapshotService.createSnapshot(questionnaireId, "expired");
     }
 
+    private boolean isQuotaFull(Questionnaire questionnaire) {
+        if (questionnaire.getMaxResponses() == null || questionnaire.getMaxResponses() <= 0) {
+            return false;
+        }
+        int count = responseRepository.countByQuestionnaireId(questionnaire.getId());
+        return count >= questionnaire.getMaxResponses();
+    }
+
+    @Transactional
+    public void processQuotaFullQuestionnaire(String questionnaireId) {
+        Questionnaire questionnaire = questionnaireRepository.findByIdWithQuestions(questionnaireId);
+        if (questionnaire == null) {
+            return;
+        }
+
+        if (!"active".equals(questionnaire.getStatus())) {
+            return;
+        }
+
+        if (questionnaire.getMaxResponses() == null || questionnaire.getMaxResponses() <= 0) {
+            return;
+        }
+
+        int currentCount = responseRepository.countByQuestionnaireId(questionnaireId);
+        if (currentCount < questionnaire.getMaxResponses()) {
+            return;
+        }
+
+        questionnaire.setStatus("closed");
+        questionnaireRepository.save(questionnaire);
+
+        snapshotService.createSnapshot(questionnaireId, "quota_full");
+    }
+
     @Transactional
     public QuestionnaireDTO createQuestionnaire(QuestionnaireDTO dto) {
         Questionnaire questionnaire = new Questionnaire();
@@ -126,6 +171,8 @@ public class QuestionnaireService {
         questionnaire.setCreatedAt(LocalDateTime.now());
         questionnaire.setCoverConfig(serializeCoverConfig(dto.getCoverConfig()));
         questionnaire.setAccessPassword(dto.getAccessPassword());
+        questionnaire.setMaxResponses(dto.getMaxResponses());
+        questionnaire.setClosedMessage(dto.getClosedMessage());
 
         questionnaire = questionnaireRepository.save(questionnaire);
 
@@ -181,6 +228,12 @@ public class QuestionnaireService {
         }
         if (dto.getAccessPassword() != null) {
             questionnaire.setAccessPassword(dto.getAccessPassword().trim().isEmpty() ? null : dto.getAccessPassword());
+        }
+        if (dto.getMaxResponses() != null) {
+            questionnaire.setMaxResponses(dto.getMaxResponses() > 0 ? dto.getMaxResponses() : null);
+        }
+        if (dto.getClosedMessage() != null) {
+            questionnaire.setClosedMessage(dto.getClosedMessage().trim().isEmpty() ? null : dto.getClosedMessage());
         }
 
         questionnaire = questionnaireRepository.save(questionnaire);
@@ -311,6 +364,13 @@ public class QuestionnaireService {
             return SubmitResult.fail(SubmitResult.ERROR_EXPIRED, "问卷已截止");
         }
 
+        if (isQuotaFull(questionnaire)) {
+            return SubmitResult.fail(SubmitResult.ERROR_QUOTA_FULL,
+                    questionnaire.getClosedMessage() != null && !questionnaire.getClosedMessage().trim().isEmpty()
+                            ? questionnaire.getClosedMessage()
+                            : "问卷已达到最大回收份数，感谢您的关注");
+        }
+
         if (!rateLimitService.tryAcquireIp(questionnaire, ipAddress)) {
             return SubmitResult.fail(SubmitResult.ERROR_RATE_LIMITED, "当前提交人数较多，请稍后再试");
         }
@@ -356,6 +416,13 @@ public class QuestionnaireService {
         }
 
         redisService.markSubmitted(id, request.getRespondentId());
+
+        if (questionnaire.getMaxResponses() != null && questionnaire.getMaxResponses() > 0) {
+            int currentCount = responseRepository.countByQuestionnaireId(id);
+            if (currentCount >= questionnaire.getMaxResponses()) {
+                processQuotaFullQuestionnaire(id);
+            }
+        }
 
         try {
             fingerprintService.createAndSaveFingerprint(
@@ -614,6 +681,9 @@ public class QuestionnaireService {
             dto.setAccessPassword(questionnaire.getAccessPassword());
         }
 
+        dto.setMaxResponses(questionnaire.getMaxResponses());
+        dto.setClosedMessage(questionnaire.getClosedMessage());
+
         boolean resultsVisible = isStatisticsVisible(questionnaire, viewerToken);
         if (resultsVisible) {
             Integer responseCount = questionnaireRepository.countResponsesByQuestionnaireId(questionnaire.getId());
@@ -663,6 +733,21 @@ public class QuestionnaireService {
             result.addExpiredCount();
         }
 
+        List<Questionnaire> allActive = questionnaireRepository.findAll().stream()
+                .filter(q -> "active".equals(q.getStatus()))
+                .toList();
+        for (Questionnaire q : allActive) {
+            if (q.getMaxResponses() != null && q.getMaxResponses() > 0) {
+                int count = responseRepository.countByQuestionnaireId(q.getId());
+                if (count >= q.getMaxResponses()) {
+                    q.setStatus("closed");
+                    questionnaireRepository.save(q);
+                    snapshotService.createSnapshot(q.getId(), "quota_full");
+                    result.addQuotaFullCount();
+                }
+            }
+        }
+
         List<Questionnaire> expiredReactivated = questionnaireRepository.findExpiredButDeadlineNotReached(now);
         for (Questionnaire q : expiredReactivated) {
             q.setStatus("active");
@@ -678,6 +763,7 @@ public class QuestionnaireService {
         private LocalDateTime inspectTime;
         private int expiredCount;
         private int reactivatedCount;
+        private int quotaFullCount;
 
         public LocalDateTime getInspectTime() {
             return inspectTime;
@@ -703,8 +789,16 @@ public class QuestionnaireService {
             this.reactivatedCount++;
         }
 
+        public int getQuotaFullCount() {
+            return quotaFullCount;
+        }
+
+        public void addQuotaFullCount() {
+            this.quotaFullCount++;
+        }
+
         public int getTotalCorrected() {
-            return expiredCount + reactivatedCount;
+            return expiredCount + reactivatedCount + quotaFullCount;
         }
     }
 

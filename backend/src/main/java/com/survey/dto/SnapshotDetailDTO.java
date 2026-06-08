@@ -21,6 +21,8 @@ public class SnapshotDetailDTO {
     private Integer responseCount;
     private Integer questionCount;
     private Map<String, Object> coverConfig;
+    private Integer maxResponses;
+    private String closedMessage;
     private List<QuestionDTO> questions;
     private StatisticsResponse statistics;
 }
